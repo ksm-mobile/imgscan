@@ -122,29 +122,36 @@ w-24 h-24 rounded-full bg-white border-[5px] border-gray-300 z-30"
 id="resultUI"
 class="hidden fixed inset-0 bg-[#e5e5e5] z-50 flex flex-col"
 >
+
 <div
 class="bg-white p-4 flex justify-between items-center shadow"
 >
+
 <button
 id="retakeBtn"
 class="font-bold text-black"
 >
 Retake
 </button>
+
 <button
 id="saveBtn"
 class="bg-emerald-500 text-white px-5 py-2 rounded-xl font-bold"
 >
-Save
+Save Ticket
 </button>
+
 </div>
 
 <div class="flex-1 overflow-auto flex items-center justify-center p-4">
+
 <canvas
 id="resultCanvas"
 class="bg-white shadow-2xl max-w-full"
 ></canvas>
+
 </div>
+
 </div>
 
 <!-- OpenCV -->
@@ -308,19 +315,26 @@ animationId=requestAnimationFrame(processFrame);
 }
 
 document.getElementById('captureBtn').addEventListener('click',()=>{
+
 cancelAnimationFrame(animationId);
 
 let src=cv.imread(overlay);
+
 let result=new cv.Mat();
 
 if(detectedDocument){
+
 let pts=[];
 
 for(let i=0;i<4;i++){
+
 pts.push({
+
 x:detectedDocument.data32S[i*2],
 y:detectedDocument.data32S[i*2+1]
+
 });
+
 }
 
 pts.sort((a,b)=>a.y-b.y);
@@ -344,17 +358,21 @@ Math.hypot(tl.x-bl.x,tl.y-bl.y)
 );
 
 let srcTri=cv.matFromArray(4,1,cv.CV_32FC2,[
+
 tl.x,tl.y,
 tr.x,tr.y,
 br.x,br.y,
 bl.x,bl.y
+
 ]);
 
 let dstTri=cv.matFromArray(4,1,cv.CV_32FC2,[
+
 0,0,
 width,0,
 width,height,
 0,height
+
 ]);
 
 let M=cv.getPerspectiveTransform(srcTri,dstTri);
@@ -369,21 +387,27 @@ new cv.Size(width,height)
 srcTri.delete();
 dstTri.delete();
 M.delete();
+
 }else{
+
 src.copyTo(result);
+
 }
 
-// Show the original colored, perspective-corrected image directly
+// SHOW ORIGINAL COLORED IMAGE (NO B&W FILTER)
 resultCanvas.width=result.cols;
 resultCanvas.height=result.rows;
+
 cv.imshow(resultCanvas, result);
 
-// Cleanup
+// Cleanup memory
 src.delete();
 result.delete();
 
 document.getElementById('scannerUI').classList.add('hidden');
+
 document.getElementById('resultUI').classList.remove('hidden');
+
 });
 
 document.getElementById('retakeBtn').addEventListener('click',()=>{
