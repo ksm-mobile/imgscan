@@ -2,253 +2,525 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport"
-content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+
+<meta
+name="viewport"
+content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"
+/>
 
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="theme-color" content="#111827" />
 
-<title>Scanner App</title>
+<title>Scanner</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
 
 <style>
+
 html,
-body {
-margin: 0;
-padding: 0;
-overflow: hidden;
-background: #000;
-font-family: sans-serif;
-height: 100%;
-width: 100%;
-touch-action: none;
+body{
+margin:0;
+padding:0;
+width:100%;
+height:100%;
+overflow:hidden;
+background:black;
+font-family:sans-serif;
+touch-action:none;
 }
 
 #video,
-#canvas {
-position: absolute;
-inset: 0;
-width: 100%;
-height: 100%;
-object-fit: cover;
+#overlay{
+position:absolute;
+inset:0;
+width:100%;
+height:100%;
+object-fit:cover;
 }
 
-.spinner {
-border: 4px solid rgba(255,255,255,0.2);
-border-top: 4px solid #10b981;
-border-radius: 50%;
-width: 40px;
-height: 40px;
-animation: spin 1s linear infinite;
+.spinner{
+border:4px solid rgba(255,255,255,.2);
+border-top:4px solid #10b981;
+border-radius:50%;
+width:42px;
+height:42px;
+animation:spin 1s linear infinite;
 }
 
-@keyframes spin {
-0% { transform: rotate(0deg); }
-100% { transform: rotate(360deg); }
+@keyframes spin{
+0%{transform:rotate(0deg)}
+100%{transform:rotate(360deg)}
 }
+
 </style>
 </head>
 
 <body>
 
-<!-- Loading -->
-<div id="loading"
-class="fixed inset-0 bg-black flex flex-col items-center justify-center text-white z-50">
+<!-- LOADING -->
+
+<div
+id="loading"
+class="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center text-white"
+>
+
 <div class="spinner mb-4"></div>
-<p id="loadingText">Loading OpenCV...</p>
+
+<p id="loadingText" class="text-lg">
+Loading OpenCV...
+</p>
+
 </div>
 
-<!-- Start Screen -->
-<div id="startScreen"
-class="fixed inset-0 bg-black flex items-center justify-center z-40 hidden">
-<button id="startBtn"
-class="bg-emerald-500 text-white px-8 py-4 rounded-2xl text-xl font-bold">
+<!-- START -->
+
+<div
+id="startScreen"
+class="hidden fixed inset-0 bg-black z-40 flex items-center justify-center"
+>
+
+<button
+id="startBtn"
+class="bg-emerald-500 text-white px-8 py-4 rounded-2xl text-2xl font-bold"
+>
 Start Camera
 </button>
+
 </div>
 
-<!-- Scanner -->
-<div id="scanner" class="hidden fixed inset-0 bg-black">
+<!-- CAMERA -->
+
+<div
+id="scannerUI"
+class="hidden fixed inset-0 bg-black overflow-hidden"
+>
 
 <video
 id="video"
 autoplay
-muted
 playsinline
+muted
 ></video>
 
-<canvas id="canvas"></canvas>
+<canvas id="overlay"></canvas>
 
-<div class="absolute inset-0 border border-white/20 m-6 rounded-2xl pointer-events-none"></div>
+<!-- BORDER -->
 
-<button id="captureBtn"
-class="absolute bottom-10 left-1/2 -translate-x-1/2
-w-20 h-20 rounded-full bg-white border-4 border-gray-300 z-20">
-</button>
+<div
+class="absolute inset-0 border border-white/20 m-6 rounded-2xl pointer-events-none"
+></div>
+
+<!-- TEXT -->
+
+<div
+class="absolute top-12 left-1/2 -translate-x-1/2 z-30"
+>
+
+<div
+id="statusText"
+class="bg-black/50 text-white px-4 py-2 rounded-full text-sm"
+>
+Searching document...
+</div>
 
 </div>
 
-<!-- Result -->
-<div id="result"
-class="hidden fixed inset-0 bg-black z-50 flex flex-col">
+<!-- CAPTURE -->
 
-<div class="p-4 bg-white flex justify-between items-center">
-<button id="retakeBtn" class="font-bold text-black">
+<button
+id="captureBtn"
+class="absolute bottom-10 left-1/2 -translate-x-1/2
+w-24 h-24 rounded-full bg-white border-[5px] border-gray-300 z-30"
+></button>
+
+</div>
+
+<!-- RESULT -->
+
+<div
+id="resultUI"
+class="hidden fixed inset-0 bg-[#e5e5e5] z-50 flex flex-col"
+>
+
+<div
+class="bg-white p-4 flex justify-between items-center shadow"
+>
+
+<button
+id="retakeBtn"
+class="font-bold text-black"
+>
 Retake
 </button>
 
-<button id="saveBtn"
-class="bg-emerald-500 text-white px-4 py-2 rounded-xl font-bold">
+<button
+id="saveBtn"
+class="bg-emerald-500 text-white px-5 py-2 rounded-xl font-bold"
+>
 Save
 </button>
-</div>
-
-<div class="flex-1 overflow-auto bg-gray-200 flex items-center justify-center">
-<canvas id="resultCanvas" class="max-w-full"></canvas>
-</div>
 
 </div>
+
+<div class="flex-1 overflow-auto flex items-center justify-center p-4">
+
+<canvas
+id="resultCanvas"
+class="bg-white shadow-2xl max-w-full"
+></canvas>
+
+</div>
+
+</div>
+
+<!-- OpenCV -->
 
 <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 
 <script>
+
 let video = document.getElementById('video');
-let canvas = document.getElementById('canvas');
-let ctx = canvas.getContext('2d');
+let overlay = document.getElementById('overlay');
+let ctx = overlay.getContext('2d');
 
 let resultCanvas = document.getElementById('resultCanvas');
 
-let stream;
 let animationId;
+let detectedDocument = null;
 
-let cvReady = false;
+function waitForOpenCV(){
 
-function waitForOpenCV() {
-if (window.cv && cv.imread) {
-cvReady = true;
+if(window.cv && cv.imread){
 
 document.getElementById('loading').classList.add('hidden');
+
 document.getElementById('startScreen').classList.remove('hidden');
 
 return;
 }
 
-setTimeout(waitForOpenCV, 300);
+setTimeout(waitForOpenCV,300);
 }
 
 waitForOpenCV();
 
-async function startCamera() {
-try {
-stream = await navigator.mediaDevices.getUserMedia({
-video: {
-facingMode: {
-ideal: 'environment'
+async function startCamera(){
+
+try{
+
+const stream = await navigator.mediaDevices.getUserMedia({
+
+video:{
+facingMode:{ideal:'environment'},
+width:{ideal:1920},
+height:{ideal:1080}
 },
-width: {
-ideal: 1280
-},
-height: {
-ideal: 720
-}
-},
-audio: false
+audio:false
+
 });
 
 video.srcObject = stream;
 
 await video.play();
 
-video.onloadedmetadata = () => {
-canvas.width = video.videoWidth;
-canvas.height = video.videoHeight;
+video.onloadedmetadata = ()=>{
+
+overlay.width = video.videoWidth;
+overlay.height = video.videoHeight;
 
 processFrame();
+
 };
 
-} catch (err) {
+}catch(err){
+
 console.error(err);
-alert('Camera failed. Ensure HTTPS and camera permissions are enabled.');
-}
-}
 
-function processFrame() {
-if (!video.videoWidth) {
-animationId = requestAnimationFrame(processFrame);
-return;
+alert('Camera access failed.');
+
 }
 
-ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-
-animationId = requestAnimationFrame(processFrame);
 }
 
-// Start Button Required For iPhone Safari
+document.getElementById('startBtn').addEventListener('click',async()=>{
 
-document.getElementById('startBtn').addEventListener('click', async () => {
 document.getElementById('startScreen').classList.add('hidden');
-document.getElementById('scanner').classList.remove('hidden');
+
+document.getElementById('scannerUI').classList.remove('hidden');
 
 await startCamera();
+
 });
 
-// Capture
+function processFrame(){
 
-document.getElementById('captureBtn').addEventListener('click', () => {
-cancelAnimationFrame(animationId);
+if(!video.videoWidth){
 
-resultCanvas.width = canvas.width;
-resultCanvas.height = canvas.height;
+animationId=requestAnimationFrame(processFrame);
 
-let rctx = resultCanvas.getContext('2d');
-rctx.drawImage(canvas, 0, 0);
+return;
 
-// OpenCV filter
-let src = cv.imread(resultCanvas);
-let gray = new cv.Mat();
-let thresh = new cv.Mat();
+}
 
-cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+overlay.width=video.videoWidth;
+overlay.height=video.videoHeight;
 
-cv.adaptiveThreshold(
+ctx.clearRect(0,0,overlay.width,overlay.height);
+
+ctx.drawImage(video,0,0,overlay.width,overlay.height);
+
+try{
+
+let src=cv.imread(overlay);
+
+let gray=new cv.Mat();
+let blur=new cv.Mat();
+let edges=new cv.Mat();
+
+cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
+
+cv.GaussianBlur(
 gray,
-thresh,
-255,
-cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-cv.THRESH_BINARY,
-11,
-2
+blur,
+new cv.Size(5,5),
+0
 );
 
-cv.imshow(resultCanvas, thresh);
+cv.Canny(
+blur,
+edges,
+75,
+200
+);
+
+let contours=new cv.MatVector();
+let hierarchy=new cv.Mat();
+
+cv.findContours(
+edges,
+contours,
+hierarchy,
+cv.RETR_LIST,
+cv.CHAIN_APPROX_SIMPLE
+);
+
+let biggest=null;
+let maxArea=0;
+
+for(let i=0;i<contours.size();i++){
+
+let cnt=contours.get(i);
+
+let area=cv.contourArea(cnt);
+
+if(area>5000){
+
+let peri=cv.arcLength(cnt,true);
+
+let approx=new cv.Mat();
+
+cv.approxPolyDP(
+cnt,
+approx,
+0.02*peri,
+true
+);
+
+if(approx.rows===4 && area>maxArea){
+
+maxArea=area;
+
+biggest=approx;
+
+}
+
+}
+
+}
+
+if(biggest){
+
+detectedDocument=biggest;
+
+document.getElementById('statusText').innerText='Document Detected';
+
+ctx.strokeStyle='#00ff99';
+ctx.lineWidth=6;
+
+for(let i=0;i<4;i++){
+
+let x1=biggest.data32S[i*2];
+let y1=biggest.data32S[i*2+1];
+
+let x2=biggest.data32S[((i+1)%4)*2];
+let y2=biggest.data32S[((i+1)%4)*2+1];
+
+ctx.beginPath();
+ctx.moveTo(x1,y1);
+ctx.lineTo(x2,y2);
+ctx.stroke();
+
+}
+
+}else{
+
+detectedDocument=null;
+
+document.getElementById('statusText').innerText='Searching document...';
+
+}
 
 src.delete();
 gray.delete();
-thresh.delete();
+blur.delete();
+edges.delete();
+contours.delete();
+hierarchy.delete();
 
+}catch(err){
 
-document.getElementById('scanner').classList.add('hidden');
-document.getElementById('result').classList.remove('hidden');
+console.log(err);
+
+}
+
+animationId=requestAnimationFrame(processFrame);
+
+}
+
+document.getElementById('captureBtn').addEventListener('click',()=>{
+
+cancelAnimationFrame(animationId);
+
+let src=cv.imread(overlay);
+
+let result=new cv.Mat();
+
+if(detectedDocument){
+
+let pts=[];
+
+for(let i=0;i<4;i++){
+
+pts.push({
+
+x:detectedDocument.data32S[i*2],
+y:detectedDocument.data32S[i*2+1]
+
 });
 
-// Retake
+}
 
-document.getElementById('retakeBtn').addEventListener('click', () => {
-document.getElementById('result').classList.add('hidden');
-document.getElementById('scanner').classList.remove('hidden');
+pts.sort((a,b)=>a.y-b.y);
+
+let top=pts.slice(0,2).sort((a,b)=>a.x-b.x);
+let bottom=pts.slice(2,4).sort((a,b)=>a.x-b.x);
+
+let tl=top[0];
+let tr=top[1];
+let bl=bottom[0];
+let br=bottom[1];
+
+let width=Math.max(
+Math.hypot(br.x-bl.x,br.y-bl.y),
+Math.hypot(tr.x-tl.x,tr.y-tl.y)
+);
+
+let height=Math.max(
+Math.hypot(tr.x-br.x,tr.y-br.y),
+Math.hypot(tl.x-bl.x,tl.y-bl.y)
+);
+
+let srcTri=cv.matFromArray(4,1,cv.CV_32FC2,[
+
+tl.x,tl.y,
+tr.x,tr.y,
+br.x,br.y,
+bl.x,bl.y
+
+]);
+
+let dstTri=cv.matFromArray(4,1,cv.CV_32FC2,[
+
+0,0,
+width,0,
+width,height,
+0,height
+
+]);
+
+let M=cv.getPerspectiveTransform(srcTri,dstTri);
+
+cv.warpPerspective(
+src,
+result,
+M,
+new cv.Size(width,height)
+);
+
+srcTri.delete();
+dstTri.delete();
+M.delete();
+
+}else{
+
+src.copyTo(result);
+
+}
+
+let gray=new cv.Mat();
+let finalDoc=new cv.Mat();
+
+cv.cvtColor(result,gray,cv.COLOR_RGBA2GRAY);
+
+cv.adaptiveThreshold(
+
+gray,
+finalDoc,
+255,
+cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+cv.THRESH_BINARY,
+15,
+15
+
+);
+
+resultCanvas.width=finalDoc.cols;
+resultCanvas.height=finalDoc.rows;
+
+cv.imshow(resultCanvas,finalDoc);
+
+src.delete();
+result.delete();
+gray.delete();
+finalDoc.delete();
+
+document.getElementById('scannerUI').classList.add('hidden');
+
+document.getElementById('resultUI').classList.remove('hidden');
+
+});
+
+document.getElementById('retakeBtn').addEventListener('click',()=>{
+
+document.getElementById('resultUI').classList.add('hidden');
+
+document.getElementById('scannerUI').classList.remove('hidden');
 
 processFrame();
+
 });
 
-// Save
+document.getElementById('saveBtn').addEventListener('click',()=>{
 
-document.getElementById('saveBtn').addEventListener('click', () => {
-let link = document.createElement('a');
-link.download = `scan_${Date.now()}.png`;
-link.href = resultCanvas.toDataURL('image/png');
+let link=document.createElement('a');
+
+link.download=`scan_${Date.now()}.png`;
+
+link.href=resultCanvas.toDataURL('image/png');
+
 link.click();
+
 });
 
 </script>
