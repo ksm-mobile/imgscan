@@ -11,7 +11,7 @@
     <title>Scanner App</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: none; }
+        body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: none; overscroll-behavior: none; }
         .spinner { border: 4px solid rgba(255,255,255,0.3); border-radius: 50%; border-top: 4px solid #10B981; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
@@ -170,69 +170,75 @@
 
                 src.copyTo(dst); 
                 
-                let scale = src.cols / MAX_PROCESSING_WIDTH;
-                let procSize = new cv.Size(MAX_PROCESSING_WIDTH, Math.round(src.rows / scale));
-                cv.resize(src, proc, procSize);
-                
-                cv.cvtColor(proc, gray, cv.COLOR_RGBA2GRAY, 0);
-                cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
-                cv.Canny(gray, edges, 75, 200, 3, false);
-
-                let contours = new cv.MatVector();
-                let hierarchy = new cv.Mat();
-                cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
-
-                let maxArea = 0;
-                let bestApprox = null;
-
-                for (let i = 0; i < contours.size(); ++i) {
-                    let cnt = contours.get(i);
-                    let area = cv.contourArea(cnt);
+                try {
+                    let scale = src.cols / MAX_PROCESSING_WIDTH;
+                    let procSize = new cv.Size(MAX_PROCESSING_WIDTH, Math.round(src.rows / scale));
+                    cv.resize(src, proc, procSize);
                     
-                    if (area > 1000) {
-                        let peri = cv.arcLength(cnt, true);
-                        let approx = new cv.Mat();
-                        cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+                    cv.cvtColor(proc, gray, cv.COLOR_RGBA2GRAY, 0);
+                    cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+                    cv.Canny(gray, edges, 50, 150, 3, false); // Adjusted for better receipt detection
+
+                    let contours = new cv.MatVector();
+                    let hierarchy = new cv.Mat();
+                    cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+                    let maxArea = 0;
+                    let bestApprox = null;
+                    let minArea = proc.cols * proc.rows * 0.05; // At least 5% of screen
+
+                    for (let i = 0; i < contours.size(); ++i) {
+                        let cnt = contours.get(i);
+                        let area = cv.contourArea(cnt);
                         
-                        if (approx.rows === 4 && area > maxArea) {
-                            maxArea = area;
-                            if (bestApprox) bestApprox.delete();
-                            bestApprox = approx.clone();
+                        if (area > minArea) {
+                            let peri = cv.arcLength(cnt, true);
+                            let approx = new cv.Mat();
+                            // 0.04 allows rougher edges (like paper receipts)
+                            cv.approxPolyDP(cnt, approx, 0.04 * peri, true);
+                            
+                            if (approx.rows === 4 && area > maxArea) {
+                                maxArea = area;
+                                if (bestApprox) bestApprox.delete();
+                                bestApprox = approx.clone();
+                            }
+                            approx.delete();
                         }
-                        approx.delete();
-                    }
-                    cnt.delete();
-                }
-
-                currentDocumentCorners = null;
-
-                if (bestApprox) {
-                    currentDocumentCorners = [];
-                    for (let i = 0; i < 4; i++) {
-                        currentDocumentCorners.push({
-                            x: bestApprox.data32S[i * 2] * scale,
-                            y: bestApprox.data32S[i * 2 + 1] * scale
-                        });
+                        cnt.delete();
                     }
 
-                    for (let i = 0; i < 4; i++) {
-                        let p1 = new cv.Point(currentDocumentCorners[i].x, currentDocumentCorners[i].y);
-                        let p2 = new cv.Point(currentDocumentCorners[(i + 1) % 4].x, currentDocumentCorners[(i + 1) % 4].y);
-                        cv.line(dst, p1, p2, [16, 185, 129, 255], 4); 
+                    currentDocumentCorners = null;
+
+                    if (bestApprox) {
+                        currentDocumentCorners = [];
+                        for (let i = 0; i < 4; i++) {
+                            currentDocumentCorners.push({
+                                x: bestApprox.data32S[i * 2] * scale,
+                                y: bestApprox.data32S[i * 2 + 1] * scale
+                            });
+                        }
+
+                        for (let i = 0; i < 4; i++) {
+                            let p1 = new cv.Point(currentDocumentCorners[i].x, currentDocumentCorners[i].y);
+                            let p2 = new cv.Point(currentDocumentCorners[(i + 1) % 4].x, currentDocumentCorners[(i + 1) % 4].y);
+                            cv.line(dst, p1, p2, [16, 185, 129, 255], 4); 
+                        }
+                        bestApprox.delete();
+                        
+                        docFoundFrames++;
+                        if(docFoundFrames > 5) instructionText.style.opacity = 1;
+                    } else {
+                        docFoundFrames = 0;
+                        instructionText.style.opacity = 0;
                     }
-                    bestApprox.delete();
-                    
-                    docFoundFrames++;
-                    if(docFoundFrames > 5) instructionText.style.opacity = 1;
-                } else {
-                    docFoundFrames = 0;
-                    instructionText.style.opacity = 0;
+
+                    contours.delete();
+                    hierarchy.delete();
+                } catch (visionErr) {
+                    console.warn("Vision processing skipped a frame:", visionErr);
                 }
 
                 cv.imshow('canvasOutput', dst);
-
-                contours.delete();
-                hierarchy.delete();
 
                 animationId = requestAnimationFrame(processVideo);
             } catch (err) {
@@ -258,40 +264,49 @@
         }
 
         document.getElementById('scanBtn').addEventListener('click', () => {
-            if (!currentDocumentCorners || currentDocumentCorners.length !== 4) {
-                document.getElementById('scanBtn').style.transform = "scale(0.95)";
-                setTimeout(()=> document.getElementById('scanBtn').style.transform = "scale(1)", 150);
-                return;
-            }
+            // Visual feedback for clicking
+            document.getElementById('scanBtn').style.transform = "scale(0.90)";
+            setTimeout(()=> document.getElementById('scanBtn').style.transform = "scale(1)", 150);
 
             cancelAnimationFrame(animationId);
             document.getElementById('scannerUI').classList.add('hidden');
             document.getElementById('resultUI').classList.remove('hidden');
 
             try {
-                let orderedPts = orderPoints(currentDocumentCorners);
-                let tl = orderedPts[0], tr = orderedPts[1], br = orderedPts[2], bl = orderedPts[3];
-
-                let widthA = distance(br, bl), widthB = distance(tr, tl);
-                let maxWidth = Math.max(parseInt(widthA), parseInt(widthB));
-
-                let heightA = distance(tr, br), heightB = distance(tl, bl);
-                let maxHeight = Math.max(parseInt(heightA), parseInt(heightB));
-
-                let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
-                let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, maxWidth - 1, 0, maxWidth - 1, maxHeight - 1, 0, maxHeight - 1]);
-
-                let transform = cv.getPerspectiveTransform(srcTri, dstTri);
                 let finalDoc = new cv.Mat();
-                cv.warpPerspective(src, finalDoc, transform, new cv.Size(maxWidth, maxHeight));
 
+                if (currentDocumentCorners && currentDocumentCorners.length === 4) {
+                    // Perfect scan found: Crop it
+                    let orderedPts = orderPoints(currentDocumentCorners);
+                    let tl = orderedPts[0], tr = orderedPts[1], br = orderedPts[2], bl = orderedPts[3];
+
+                    let widthA = distance(br, bl), widthB = distance(tr, tl);
+                    let maxWidth = Math.max(parseInt(widthA), parseInt(widthB));
+
+                    let heightA = distance(tr, br), heightB = distance(tl, bl);
+                    let maxHeight = Math.max(parseInt(heightA), parseInt(heightB));
+
+                    let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
+                    let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, maxWidth - 1, 0, maxWidth - 1, maxHeight - 1, 0, maxHeight - 1]);
+
+                    let transform = cv.getPerspectiveTransform(srcTri, dstTri);
+                    cv.warpPerspective(src, finalDoc, transform, new cv.Size(maxWidth, maxHeight));
+
+                    srcTri.delete(); dstTri.delete(); transform.delete();
+                } else {
+                    // Fallback: If green box isn't locked, just capture the whole frame manually!
+                    src.copyTo(finalDoc);
+                }
+
+                // Apply B&W Document Filter
                 cv.cvtColor(finalDoc, finalDoc, cv.COLOR_RGBA2GRAY, 0);
                 cv.adaptiveThreshold(finalDoc, finalDoc, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 15, 4);
 
                 cv.imshow('resultCanvas', finalDoc);
 
-                srcTri.delete(); dstTri.delete(); transform.delete(); finalDoc.delete();
+                finalDoc.delete();
             } catch (err) {
+                console.error(err);
                 alert("Processing failed. Retake image.");
             }
         });
