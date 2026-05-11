@@ -2,18 +2,18 @@
 <html lang="en">
 <head>
 
-<meta charset="UTF-8" />
+<meta charset="UTF-8"/>
 
 <meta
 name="viewport"
 content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"
 />
 
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-<meta name="theme-color" content="#111827" />
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="theme-color" content="#111827"/>
 
-<title>Mobile Scanner</title>
+<title>Scanner</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
 
@@ -91,7 +91,7 @@ Start Camera
 
 </div>
 
-<!-- SCANNER -->
+<!-- CAMERA -->
 
 <div
 id="scannerUI"
@@ -101,13 +101,13 @@ class="hidden fixed inset-0 bg-black overflow-hidden"
 <video
 id="video"
 autoplay
-muted
 playsinline
+muted
 ></video>
 
 <canvas id="overlay"></canvas>
 
-<!-- BORDER -->
+<!-- GUIDE -->
 
 <div
 class="absolute inset-0 border border-white/20 m-6 rounded-2xl pointer-events-none"
@@ -116,7 +116,7 @@ class="absolute inset-0 border border-white/20 m-6 rounded-2xl pointer-events-no
 <!-- STATUS -->
 
 <div
-class="absolute top-12 left-1/2 -translate-x-1/2 z-30"
+class="absolute top-12 left-1/2 -translate-x-1/2 z-20"
 >
 
 <div
@@ -255,7 +255,7 @@ processFrame();
 
 console.error(err);
 
-alert('Camera access failed');
+alert('Camera failed');
 
 }
 
@@ -293,7 +293,7 @@ overlay.width=video.videoWidth;
 
 overlay.height=video.videoHeight;
 
-/* DRAW VIDEO */
+/* DRAW CAMERA */
 
 ctx.drawImage(
 video,
@@ -313,35 +313,43 @@ let blur=new cv.Mat();
 
 let edges=new cv.Mat();
 
+/* GRAYSCALE */
+
 cv.cvtColor(
 src,
 gray,
 cv.COLOR_RGBA2GRAY
 );
 
+/* BLUR */
+
 cv.GaussianBlur(
 gray,
 blur,
-new cv.Size(5,5),
+new cv.Size(3,3),
 0
 );
+
+/* EDGE DETECTION */
 
 cv.Canny(
 blur,
 edges,
-75,
-200
+30,
+120
 );
 
 let contours=new cv.MatVector();
 
 let hierarchy=new cv.Mat();
 
+/* FIND CONTOURS */
+
 cv.findContours(
 edges,
 contours,
 hierarchy,
-cv.RETR_LIST,
+cv.RETR_EXTERNAL,
 cv.CHAIN_APPROX_SIMPLE
 );
 
@@ -349,13 +357,17 @@ let biggest=null;
 
 let maxArea=0;
 
+/* FIND DOCUMENT */
+
 for(let i=0;i<contours.size();i++){
 
 let cnt=contours.get(i);
 
 let area=cv.contourArea(cnt);
 
-if(area>12000){
+/* LOWER LIMIT FOR SMALL PAPER */
+
+if(area>2500){
 
 let peri=cv.arcLength(cnt,true);
 
@@ -364,11 +376,17 @@ let approx=new cv.Mat();
 cv.approxPolyDP(
 cnt,
 approx,
-0.02*peri,
+0.03*peri,
 true
 );
 
-if(approx.rows===4 && area>maxArea){
+/* ACCEPT MORE SHAPES */
+
+if(
+approx.rows>=4 &&
+approx.rows<=8 &&
+area>maxArea
+){
 
 maxArea=area;
 
@@ -380,37 +398,35 @@ biggest=approx;
 
 }
 
-/* DRAW GREEN BORDER */
+/* DRAW DETECTION */
 
 if(biggest){
 
-detectedDocument=biggest;
-
-document.getElementById('statusText').innerText='Document Detected';
+let rect=cv.boundingRect(biggest);
 
 ctx.strokeStyle='#00ff99';
 
 ctx.lineWidth=8;
 
-for(let i=0;i<4;i++){
+ctx.strokeRect(
+rect.x,
+rect.y,
+rect.width,
+rect.height
+);
 
-let x1=biggest.data32S[i*2];
+/* SAVE RECT */
 
-let y1=biggest.data32S[i*2+1];
+detectedDocument={
 
-let x2=biggest.data32S[((i+1)%4)*2];
+x:rect.x,
+y:rect.y,
+width:rect.width,
+height:rect.height
 
-let y2=biggest.data32S[((i+1)%4)*2+1];
+};
 
-ctx.beginPath();
-
-ctx.moveTo(x1,y1);
-
-ctx.lineTo(x2,y2);
-
-ctx.stroke();
-
-}
+document.getElementById('statusText').innerText='Document Detected';
 
 }else{
 
@@ -456,87 +472,20 @@ let src=cv.imread(overlay);
 
 let result=new cv.Mat();
 
+/* AUTO CROP */
+
 if(detectedDocument){
 
-let pts=[];
+let rect=detectedDocument;
 
-for(let i=0;i<4;i++){
-
-pts.push({
-
-x:detectedDocument.data32S[i*2],
-y:detectedDocument.data32S[i*2+1]
-
-});
-
-}
-
-pts.sort((a,b)=>a.y-b.y);
-
-let top=pts.slice(0,2).sort((a,b)=>a.x-b.x);
-
-let bottom=pts.slice(2,4).sort((a,b)=>a.x-b.x);
-
-let tl=top[0];
-
-let tr=top[1];
-
-let bl=bottom[0];
-
-let br=bottom[1];
-
-let width=Math.max(
-Math.hypot(br.x-bl.x,br.y-bl.y),
-Math.hypot(tr.x-tl.x,tr.y-tl.y)
+let roi=new cv.Rect(
+rect.x,
+rect.y,
+rect.width,
+rect.height
 );
 
-let height=Math.max(
-Math.hypot(tr.x-br.x,tr.y-br.y),
-Math.hypot(tl.x-bl.x,tl.y-bl.y)
-);
-
-width=parseInt(width);
-
-height=parseInt(height);
-
-let srcTri=cv.matFromArray(4,1,cv.CV_32FC2,[
-
-tl.x,tl.y,
-tr.x,tr.y,
-br.x,br.y,
-bl.x,bl.y
-
-]);
-
-let dstTri=cv.matFromArray(4,1,cv.CV_32FC2,[
-
-0,0,
-width,0,
-width,height,
-0,height
-
-]);
-
-let M=cv.getPerspectiveTransform(
-srcTri,
-dstTri
-);
-
-cv.warpPerspective(
-src,
-result,
-M,
-new cv.Size(width,height),
-cv.INTER_LINEAR,
-cv.BORDER_CONSTANT,
-new cv.Scalar()
-);
-
-srcTri.delete();
-
-dstTri.delete();
-
-M.delete();
+result=src.roi(roi).clone();
 
 }else{
 
@@ -557,10 +506,10 @@ enhanced,
 
 /* BRIGHTNESS */
 
-let brightness=new cv.Mat();
+let finalImage=new cv.Mat();
 
 enhanced.convertTo(
-brightness,
+finalImage,
 -1,
 1.15,
 8
@@ -568,13 +517,13 @@ brightness,
 
 /* SHOW RESULT */
 
-resultCanvas.width=brightness.cols;
+resultCanvas.width=finalImage.cols;
 
-resultCanvas.height=brightness.rows;
+resultCanvas.height=finalImage.rows;
 
 cv.imshow(
 resultCanvas,
-brightness
+finalImage
 );
 
 /* CLEAN MEMORY */
@@ -585,9 +534,9 @@ result.delete();
 
 enhanced.delete();
 
-brightness.delete();
+finalImage.delete();
 
-/* SHOW RESULT */
+/* SHOW RESULT UI */
 
 document.getElementById('scannerUI').classList.add('hidden');
 
