@@ -1,330 +1,80 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <!-- Critical for mobile: Prevents zooming and sets app-like scaling -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <!-- PWA Tags for iOS and Android -->
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="theme-color" content="#111827">
-    <title>Scanner App</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: none; overscroll-behavior: none; }
-        .spinner { border: 4px solid rgba(255,255,255,0.3); border-radius: 50%; border-top: 4px solid #10B981; width: 40px; height: 40px; animation: spin 1s linear infinite; }
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-    </style>
-</head>
-<body class="flex flex-col h-[100dvh]">
+animationId = requestAnimationFrame(processFrame);
+return;
+}
 
-    <!-- Loading Screen -->
-    <div id="loading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 z-50">
-        <div class="spinner mb-4"></div>
-        <p class="text-lg font-semibold" id="loadingText">Loading Vision Engine...</p>
-        <p class="text-xs text-gray-400 mt-2 text-center px-4">Initializing for mobile...</p>
-    </div>
+ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-    <!-- Main Scanner UI -->
-    <div id="scannerUI" class="hidden flex-1 relative flex flex-col">
-        
-        <!-- Display Canvas Container -->
-        <div class="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
-            
-            <!-- IMPORTANT IOS FIX: The video MUST be styled with real dimensions and placed directly behind the canvas (z-0) -->
-            <video id="videoInput" playsinline autoplay muted class="absolute inset-0 w-full h-full object-contain z-0"></video>
-            
-            <!-- Canvas draws the frames and the green box over the video (z-10) -->
-            <canvas id="canvasOutput" class="absolute inset-0 w-full h-full object-contain z-10"></canvas>
-            
-            <!-- UI Overlay (z-20) -->
-            <div class="absolute inset-0 pointer-events-none border-[1px] border-white/20 m-6 rounded-xl flex flex-col items-center justify-center z-20">
-                <span class="text-white/50 text-sm tracking-[0.2em] font-bold bg-black/40 px-3 py-1 rounded-full mb-2">SCAN DOCUMENT</span>
-                <span id="instructionText" class="text-emerald-400 text-xs font-medium bg-black/40 px-3 py-1 rounded-full opacity-0 transition-opacity duration-300">Document Found! Hold still.</span>
-            </div>
-        </div>
+animationId = requestAnimationFrame(processFrame);
+}
 
-        <!-- Bottom Controls -->
-        <div class="bg-gray-900 pb-safe pt-4 px-6 flex flex-col items-center justify-center space-y-2 h-32 shrink-0 z-20 relative">
-            <button id="scanBtn" class="w-[72px] h-[72px] bg-white rounded-full flex items-center justify-center border-[3px] border-gray-400 active:bg-gray-200 transition-colors shadow-lg shadow-black/50">
-                <div class="w-14 h-14 rounded-full border-[2px] border-emerald-500 flex items-center justify-center bg-emerald-50 text-emerald-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path></svg>
-                </div>
-            </button>
-        </div>
-    </div>
+// Start Button Required For iPhone Safari
 
-    <!-- Result UI -->
-    <div id="resultUI" class="hidden absolute inset-0 bg-gray-100 flex flex-col z-40 text-black">
-        <div class="bg-white p-4 pt-safe shadow-sm flex justify-between items-center z-10 border-b">
-            <button id="retakeBtn" class="text-gray-500 font-semibold px-2 py-2 flex items-center space-x-1 active:opacity-50">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
-                <span>Retake</span>
-            </button>
-            <h2 class="font-bold text-sm">Preview</h2>
-            <button id="saveBtn" class="text-white bg-emerald-500 rounded-full px-4 py-1.5 font-semibold active:bg-emerald-600 shadow-sm">Save</button>
-        </div>
-        
-        <div class="flex-1 overflow-auto p-4 flex items-center justify-center bg-[#e5e5e5]">
-            <canvas id="resultCanvas" class="max-w-full max-h-full shadow-lg bg-white"></canvas>
-        </div>
-    </div>
+document.getElementById('startBtn').addEventListener('click', async () => {
+document.getElementById('startScreen').classList.add('hidden');
+document.getElementById('scanner').classList.remove('hidden');
 
-    <!-- OpenCV Script -->
-    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();" onerror="onOpenCvError();"></script>
+await startCamera();
+});
 
-    <script>
-        let video = document.getElementById('videoInput');
-        let src, dst, gray, edges, cap, proc;
-        let streaming = false;
-        let animationId;
-        let currentDocumentCorners = null;
-        let docFoundFrames = 0;
+// Capture
 
-        const instructionText = document.getElementById('instructionText');
+document.getElementById('captureBtn').addEventListener('click', () => {
+cancelAnimationFrame(animationId);
 
-        // Mobile performance setting
-        const MAX_PROCESSING_WIDTH = 400; 
+resultCanvas.width = canvas.width;
+resultCanvas.height = canvas.height;
 
-        function onOpenCvError() {
-            document.getElementById('loadingText').innerText = "Failed to load Engine.";
-        }
+let rctx = resultCanvas.getContext('2d');
+rctx.drawImage(canvas, 0, 0);
 
-        function onOpenCvReady() {
-            document.getElementById('loadingText').innerText = "Accessing Camera...";
-            startCamera();
-        }
+// OpenCV filter
+let src = cv.imread(resultCanvas);
+let gray = new cv.Mat();
+let thresh = new cv.Mat();
 
-        async function startCamera() {
-            try {
-                let stream;
-                try {
-                    stream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: { exact: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
-                        audio: false
-                    });
-                } catch(e) {
-                    stream = await navigator.mediaDevices.getUserMedia({
-                        video: { facingMode: 'environment' },
-                        audio: false
-                    });
-                }
+cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
 
-                video.srcObject = stream;
-                
-                // Redundant attributes to force iOS to obey
-                video.setAttribute('playsinline', 'true');
-                video.setAttribute('muted', 'true');
+cv.adaptiveThreshold(
+gray,
+thresh,
+255,
+cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+cv.THRESH_BINARY,
+11,
+2
+);
 
-                video.play().catch(e => {
-                    console.warn("Auto-play prevented:", e);
-                    document.getElementById('loadingText').innerText = "Tap screen to start camera";
-                    document.body.addEventListener('touchstart', () => video.play(), {once: true});
-                });
-                
-                video.addEventListener('loadeddata', () => {
-                    const initStream = () => {
-                        // Wait until video is actively playing and has dimensions
-                        if (video.videoWidth === 0 || video.videoHeight === 0 || video.paused) {
-                            requestAnimationFrame(initStream);
-                            return;
-                        }
+cv.imshow(resultCanvas, thresh);
 
-                        if (!streaming) {
-                            streaming = true;
-                            document.getElementById('loading').classList.add('hidden');
-                            document.getElementById('scannerUI').classList.remove('hidden');
-                            
-                            document.getElementById('canvasOutput').width = video.videoWidth;
-                            document.getElementById('canvasOutput').height = video.videoHeight;
-                            
-                            src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
-                            dst = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
-                            gray = new cv.Mat();
-                            edges = new cv.Mat();
-                            proc = new cv.Mat(); 
-                            cap = new cv.VideoCapture(video);
-                            
-                            requestAnimationFrame(processVideo);
-                        }
-                    };
-                    initStream();
-                });
-            } catch (err) {
-                alert("Camera access denied or unavailable.");
-                console.error(err);
-            }
-        }
+src.delete();
+gray.delete();
+thresh.delete();
 
-        function processVideo() {
-            if (!streaming) return;
 
-            try {
-                cap.read(src);
-                
-                // If the frame is completely empty/dropped, skip processing for this frame
-                if (src.empty()) {
-                    animationId = requestAnimationFrame(processVideo);
-                    return;
-                }
+document.getElementById('scanner').classList.add('hidden');
+document.getElementById('result').classList.remove('hidden');
+});
 
-                src.copyTo(dst); 
-                
-                try {
-                    let scale = src.cols / MAX_PROCESSING_WIDTH;
-                    let procSize = new cv.Size(MAX_PROCESSING_WIDTH, Math.round(src.rows / scale));
-                    cv.resize(src, proc, procSize);
-                    
-                    cv.cvtColor(proc, gray, cv.COLOR_RGBA2GRAY, 0);
-                    cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
-                    cv.Canny(gray, edges, 50, 150, 3, false); // Adjusted for better receipt detection
+// Retake
 
-                    let contours = new cv.MatVector();
-                    let hierarchy = new cv.Mat();
-                    cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+document.getElementById('retakeBtn').addEventListener('click', () => {
+document.getElementById('result').classList.add('hidden');
+document.getElementById('scanner').classList.remove('hidden');
 
-                    let maxArea = 0;
-                    let bestApprox = null;
-                    let minArea = proc.cols * proc.rows * 0.05; // At least 5% of screen
+processFrame();
+});
 
-                    for (let i = 0; i < contours.size(); ++i) {
-                        let cnt = contours.get(i);
-                        let area = cv.contourArea(cnt);
-                        
-                        if (area > minArea) {
-                            let peri = cv.arcLength(cnt, true);
-                            let approx = new cv.Mat();
-                            // 0.04 allows rougher edges (like paper receipts)
-                            cv.approxPolyDP(cnt, approx, 0.04 * peri, true);
-                            
-                            if (approx.rows === 4 && area > maxArea) {
-                                maxArea = area;
-                                if (bestApprox) bestApprox.delete();
-                                bestApprox = approx.clone();
-                            }
-                            approx.delete();
-                        }
-                        cnt.delete();
-                    }
+// Save
 
-                    currentDocumentCorners = null;
+document.getElementById('saveBtn').addEventListener('click', () => {
+let link = document.createElement('a');
+link.download = `scan_${Date.now()}.png`;
+link.href = resultCanvas.toDataURL('image/png');
+link.click();
+});
 
-                    if (bestApprox) {
-                        currentDocumentCorners = [];
-                        for (let i = 0; i < 4; i++) {
-                            currentDocumentCorners.push({
-                                x: bestApprox.data32S[i * 2] * scale,
-                                y: bestApprox.data32S[i * 2 + 1] * scale
-                            });
-                        }
+</script>
 
-                        for (let i = 0; i < 4; i++) {
-                            let p1 = new cv.Point(currentDocumentCorners[i].x, currentDocumentCorners[i].y);
-                            let p2 = new cv.Point(currentDocumentCorners[(i + 1) % 4].x, currentDocumentCorners[(i + 1) % 4].y);
-                            cv.line(dst, p1, p2, [16, 185, 129, 255], 4); 
-                        }
-                        bestApprox.delete();
-                        
-                        docFoundFrames++;
-                        if(docFoundFrames > 5) instructionText.style.opacity = 1;
-                    } else {
-                        docFoundFrames = 0;
-                        instructionText.style.opacity = 0;
-                    }
-
-                    contours.delete();
-                    hierarchy.delete();
-                } catch (visionErr) {
-                    console.warn("Vision processing skipped a frame:", visionErr);
-                }
-
-                cv.imshow('canvasOutput', dst);
-
-                animationId = requestAnimationFrame(processVideo);
-            } catch (err) {
-                console.error("Processing Error:", err);
-                // Continue loop even on minor frame error
-                animationId = requestAnimationFrame(processVideo);
-            }
-        }
-
-        function orderPoints(pts) {
-            let rect = new Array(4);
-            let s = pts.map(p => p.x + p.y);
-            let d = pts.map(p => p.x - p.y);
-            rect[0] = pts[s.indexOf(Math.min(...s))]; 
-            rect[2] = pts[s.indexOf(Math.max(...s))]; 
-            rect[1] = pts[d.indexOf(Math.max(...d))]; 
-            rect[3] = pts[d.indexOf(Math.min(...d))]; 
-            return rect;
-        }
-
-        function distance(p1, p2) {
-            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
-        }
-
-        document.getElementById('scanBtn').addEventListener('click', () => {
-            // Visual feedback for clicking
-            document.getElementById('scanBtn').style.transform = "scale(0.90)";
-            setTimeout(()=> document.getElementById('scanBtn').style.transform = "scale(1)", 150);
-
-            cancelAnimationFrame(animationId);
-            document.getElementById('scannerUI').classList.add('hidden');
-            document.getElementById('resultUI').classList.remove('hidden');
-
-            try {
-                let finalDoc = new cv.Mat();
-
-                if (currentDocumentCorners && currentDocumentCorners.length === 4) {
-                    // Perfect scan found: Crop it
-                    let orderedPts = orderPoints(currentDocumentCorners);
-                    let tl = orderedPts[0], tr = orderedPts[1], br = orderedPts[2], bl = orderedPts[3];
-
-                    let widthA = distance(br, bl), widthB = distance(tr, tl);
-                    let maxWidth = Math.max(parseInt(widthA), parseInt(widthB));
-
-                    let heightA = distance(tr, br), heightB = distance(tl, bl);
-                    let maxHeight = Math.max(parseInt(heightA), parseInt(heightB));
-
-                    let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
-                    let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, maxWidth - 1, 0, maxWidth - 1, maxHeight - 1, 0, maxHeight - 1]);
-
-                    let transform = cv.getPerspectiveTransform(srcTri, dstTri);
-                    cv.warpPerspective(src, finalDoc, transform, new cv.Size(maxWidth, maxHeight));
-
-                    srcTri.delete(); dstTri.delete(); transform.delete();
-                } else {
-                    // Fallback: If green box isn't locked, just capture the whole frame manually!
-                    src.copyTo(finalDoc);
-                }
-
-                // Apply B&W Document Filter
-                cv.cvtColor(finalDoc, finalDoc, cv.COLOR_RGBA2GRAY, 0);
-                cv.adaptiveThreshold(finalDoc, finalDoc, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 15, 4);
-
-                cv.imshow('resultCanvas', finalDoc);
-
-                finalDoc.delete();
-            } catch (err) {
-                console.error(err);
-                alert("Processing failed. Retake image.");
-            }
-        });
-
-        document.getElementById('retakeBtn').addEventListener('click', () => {
-            document.getElementById('resultUI').classList.add('hidden');
-            document.getElementById('scannerUI').classList.remove('hidden');
-            animationId = requestAnimationFrame(processVideo); 
-        });
-
-        document.getElementById('saveBtn').addEventListener('click', () => {
-            const dataURL = document.getElementById('resultCanvas').toDataURL('image/png');
-            const link = document.createElement('a');
-            link.download = `Scan_${Date.now()}.png`;
-            link.href = dataURL;
-            link.click();
-        });
-
-    </script>
 </body>
 </html>
