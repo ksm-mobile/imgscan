@@ -12,12 +12,11 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: none; }
-        #canvasOutput { width: 100%; height: 100%; object-fit: contain; }
         .spinner { border: 4px solid rgba(255,255,255,0.3); border-radius: 50%; border-top: 4px solid #10B981; width: 40px; height: 40px; animation: spin 1s linear infinite; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
     </style>
 </head>
-<body class="flex flex-col h-[100dvh]"> <!-- Use dvh for mobile browser chrome handling -->
+<body class="flex flex-col h-[100dvh]">
 
     <!-- Loading Screen -->
     <div id="loading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 z-50">
@@ -28,20 +27,25 @@
 
     <!-- Main Scanner UI -->
     <div id="scannerUI" class="hidden flex-1 relative flex flex-col">
-        <video id="videoInput" style="position: absolute; width: 1px; height: 1px; opacity: 0; z-index: -1;" playsinline autoplay muted></video>
         
-        <!-- Display Canvas -->
+        <!-- Display Canvas Container -->
         <div class="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
-            <canvas id="canvasOutput"></canvas>
             
-            <div class="absolute inset-0 pointer-events-none border-[1px] border-white/20 m-6 rounded-xl flex flex-col items-center justify-center">
+            <!-- IMPORTANT IOS FIX: The video MUST be styled with real dimensions and placed directly behind the canvas (z-0) -->
+            <video id="videoInput" playsinline autoplay muted class="absolute inset-0 w-full h-full object-contain z-0"></video>
+            
+            <!-- Canvas draws the frames and the green box over the video (z-10) -->
+            <canvas id="canvasOutput" class="absolute inset-0 w-full h-full object-contain z-10"></canvas>
+            
+            <!-- UI Overlay (z-20) -->
+            <div class="absolute inset-0 pointer-events-none border-[1px] border-white/20 m-6 rounded-xl flex flex-col items-center justify-center z-20">
                 <span class="text-white/50 text-sm tracking-[0.2em] font-bold bg-black/40 px-3 py-1 rounded-full mb-2">SCAN DOCUMENT</span>
                 <span id="instructionText" class="text-emerald-400 text-xs font-medium bg-black/40 px-3 py-1 rounded-full opacity-0 transition-opacity duration-300">Document Found! Hold still.</span>
             </div>
         </div>
 
         <!-- Bottom Controls -->
-        <div class="bg-gray-900 pb-safe pt-4 px-6 flex flex-col items-center justify-center space-y-2 h-32 shrink-0">
+        <div class="bg-gray-900 pb-safe pt-4 px-6 flex flex-col items-center justify-center space-y-2 h-32 shrink-0 z-20 relative">
             <button id="scanBtn" class="w-[72px] h-[72px] bg-white rounded-full flex items-center justify-center border-[3px] border-gray-400 active:bg-gray-200 transition-colors shadow-lg shadow-black/50">
                 <div class="w-14 h-14 rounded-full border-[2px] border-emerald-500 flex items-center justify-center bg-emerald-50 text-emerald-600">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path></svg>
@@ -79,7 +83,7 @@
 
         const instructionText = document.getElementById('instructionText');
 
-        // Mobile performance setting: Process a smaller image internally for speed
+        // Mobile performance setting
         const MAX_PROCESSING_WIDTH = 400; 
 
         function onOpenCvError() {
@@ -93,7 +97,6 @@
 
         async function startCamera() {
             try {
-                // Try strictly for the rear camera first (critical for mobile)
                 let stream;
                 try {
                     stream = await navigator.mediaDevices.getUserMedia({
@@ -101,7 +104,6 @@
                         audio: false
                     });
                 } catch(e) {
-                    // Fallback for desktops/devices without a specific "rear" camera
                     stream = await navigator.mediaDevices.getUserMedia({
                         video: { facingMode: 'environment' },
                         audio: false
@@ -109,13 +111,21 @@
                 }
 
                 video.srcObject = stream;
-                // Explicitly call play and handle the promise for iOS
-                video.play().catch(e => console.warn("Play prevented:", e));
                 
-                video.addEventListener('canplay', () => {
+                // Redundant attributes to force iOS to obey
+                video.setAttribute('playsinline', 'true');
+                video.setAttribute('muted', 'true');
+
+                video.play().catch(e => {
+                    console.warn("Auto-play prevented:", e);
+                    document.getElementById('loadingText').innerText = "Tap screen to start camera";
+                    document.body.addEventListener('touchstart', () => video.play(), {once: true});
+                });
+                
+                video.addEventListener('loadeddata', () => {
                     const initStream = () => {
-                        // iOS Safari sometimes fires canplay before video dimensions are ready
-                        if (video.videoWidth === 0 || video.videoHeight === 0) {
+                        // Wait until video is actively playing and has dimensions
+                        if (video.videoWidth === 0 || video.videoHeight === 0 || video.paused) {
                             requestAnimationFrame(initStream);
                             return;
                         }
@@ -128,12 +138,11 @@
                             document.getElementById('canvasOutput').width = video.videoWidth;
                             document.getElementById('canvasOutput').height = video.videoHeight;
                             
-                            // Initialize OpenCV matrices
                             src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
                             dst = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
                             gray = new cv.Mat();
                             edges = new cv.Mat();
-                            proc = new cv.Mat(); // Matrix for downscaled processing
+                            proc = new cv.Mat(); 
                             cap = new cv.VideoCapture(video);
                             
                             requestAnimationFrame(processVideo);
@@ -152,10 +161,15 @@
 
             try {
                 cap.read(src);
+                
+                // If the frame is completely empty/dropped, skip processing for this frame
+                if (src.empty()) {
+                    animationId = requestAnimationFrame(processVideo);
+                    return;
+                }
+
                 src.copyTo(dst); 
                 
-                // --- Mobile Optimization ---
-                // Scale down the image before running heavy Canny edge detection
                 let scale = src.cols / MAX_PROCESSING_WIDTH;
                 let procSize = new cv.Size(MAX_PROCESSING_WIDTH, Math.round(src.rows / scale));
                 cv.resize(src, proc, procSize);
@@ -175,7 +189,6 @@
                     let cnt = contours.get(i);
                     let area = cv.contourArea(cnt);
                     
-                    // Note: area check is smaller because we downscaled the image
                     if (area > 1000) {
                         let peri = cv.arcLength(cnt, true);
                         let approx = new cv.Mat();
@@ -195,7 +208,6 @@
 
                 if (bestApprox) {
                     currentDocumentCorners = [];
-                    // Multiply back by scale to draw on the original high-res image
                     for (let i = 0; i < 4; i++) {
                         currentDocumentCorners.push({
                             x: bestApprox.data32S[i * 2] * scale,
@@ -203,7 +215,6 @@
                         });
                     }
 
-                    // Draw green polygon
                     for (let i = 0; i < 4; i++) {
                         let p1 = new cv.Point(currentDocumentCorners[i].x, currentDocumentCorners[i].y);
                         let p2 = new cv.Point(currentDocumentCorners[(i + 1) % 4].x, currentDocumentCorners[(i + 1) % 4].y);
@@ -211,7 +222,6 @@
                     }
                     bestApprox.delete();
                     
-                    // UI Feedback
                     docFoundFrames++;
                     if(docFoundFrames > 5) instructionText.style.opacity = 1;
                 } else {
@@ -227,6 +237,8 @@
                 animationId = requestAnimationFrame(processVideo);
             } catch (err) {
                 console.error("Processing Error:", err);
+                // Continue loop even on minor frame error
+                animationId = requestAnimationFrame(processVideo);
             }
         }
 
@@ -247,7 +259,6 @@
 
         document.getElementById('scanBtn').addEventListener('click', () => {
             if (!currentDocumentCorners || currentDocumentCorners.length !== 4) {
-                // If it can't find a box, fake a subtle animation to indicate user should keep trying
                 document.getElementById('scanBtn').style.transform = "scale(0.95)";
                 setTimeout(()=> document.getElementById('scanBtn').style.transform = "scale(1)", 150);
                 return;
@@ -272,10 +283,8 @@
 
                 let transform = cv.getPerspectiveTransform(srcTri, dstTri);
                 let finalDoc = new cv.Mat();
-                // Crop from the high-res original `src`
                 cv.warpPerspective(src, finalDoc, transform, new cv.Size(maxWidth, maxHeight));
 
-                // B&W Document Filter
                 cv.cvtColor(finalDoc, finalDoc, cv.COLOR_RGBA2GRAY, 0);
                 cv.adaptiveThreshold(finalDoc, finalDoc, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 15, 4);
 
