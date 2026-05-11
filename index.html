@@ -28,7 +28,7 @@
 
     <!-- Main Scanner UI -->
     <div id="scannerUI" class="hidden flex-1 relative flex flex-col">
-        <video id="videoInput" class="hidden" playsinline autoplay></video>
+        <video id="videoInput" style="position: absolute; width: 1px; height: 1px; opacity: 0; z-index: -1;" playsinline autoplay muted></video>
         
         <!-- Display Canvas -->
         <div class="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
@@ -109,27 +109,37 @@
                 }
 
                 video.srcObject = stream;
-                video.play();
+                // Explicitly call play and handle the promise for iOS
+                video.play().catch(e => console.warn("Play prevented:", e));
                 
                 video.addEventListener('canplay', () => {
-                    if (!streaming) {
-                        streaming = true;
-                        document.getElementById('loading').classList.add('hidden');
-                        document.getElementById('scannerUI').classList.remove('hidden');
-                        
-                        document.getElementById('canvasOutput').width = video.videoWidth;
-                        document.getElementById('canvasOutput').height = video.videoHeight;
-                        
-                        // Initialize OpenCV matrices
-                        src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
-                        dst = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
-                        gray = new cv.Mat();
-                        edges = new cv.Mat();
-                        proc = new cv.Mat(); // Matrix for downscaled processing
-                        cap = new cv.VideoCapture(video);
-                        
-                        requestAnimationFrame(processVideo);
-                    }
+                    const initStream = () => {
+                        // iOS Safari sometimes fires canplay before video dimensions are ready
+                        if (video.videoWidth === 0 || video.videoHeight === 0) {
+                            requestAnimationFrame(initStream);
+                            return;
+                        }
+
+                        if (!streaming) {
+                            streaming = true;
+                            document.getElementById('loading').classList.add('hidden');
+                            document.getElementById('scannerUI').classList.remove('hidden');
+                            
+                            document.getElementById('canvasOutput').width = video.videoWidth;
+                            document.getElementById('canvasOutput').height = video.videoHeight;
+                            
+                            // Initialize OpenCV matrices
+                            src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
+                            dst = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
+                            gray = new cv.Mat();
+                            edges = new cv.Mat();
+                            proc = new cv.Mat(); // Matrix for downscaled processing
+                            cap = new cv.VideoCapture(video);
+                            
+                            requestAnimationFrame(processVideo);
+                        }
+                    };
+                    initStream();
                 });
             } catch (err) {
                 alert("Camera access denied or unavailable.");
