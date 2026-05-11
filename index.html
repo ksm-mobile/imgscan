@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+
 <meta charset="UTF-8" />
 
 <meta
@@ -12,7 +13,7 @@ content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,vie
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="theme-color" content="#111827" />
 
-<title>Scanner</title>
+<title>Mobile Scanner</title>
 
 <script src="https://cdn.tailwindcss.com"></script>
 
@@ -43,8 +44,8 @@ object-fit:cover;
 border:4px solid rgba(255,255,255,.2);
 border-top:4px solid #10b981;
 border-radius:50%;
-width:42px;
-height:42px;
+width:44px;
+height:44px;
 animation:spin 1s linear infinite;
 }
 
@@ -54,6 +55,7 @@ animation:spin 1s linear infinite;
 }
 
 </style>
+
 </head>
 
 <body>
@@ -67,8 +69,8 @@ class="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center tex
 
 <div class="spinner mb-4"></div>
 
-<p id="loadingText" class="text-lg">
-Loading OpenCV...
+<p class="text-lg font-semibold">
+Loading Scanner...
 </p>
 
 </div>
@@ -89,7 +91,7 @@ Start Camera
 
 </div>
 
-<!-- CAMERA -->
+<!-- SCANNER -->
 
 <div
 id="scannerUI"
@@ -99,8 +101,8 @@ class="hidden fixed inset-0 bg-black overflow-hidden"
 <video
 id="video"
 autoplay
-playsinline
 muted
+playsinline
 ></video>
 
 <canvas id="overlay"></canvas>
@@ -111,7 +113,7 @@ muted
 class="absolute inset-0 border border-white/20 m-6 rounded-2xl pointer-events-none"
 ></div>
 
-<!-- TEXT -->
+<!-- STATUS -->
 
 <div
 class="absolute top-12 left-1/2 -translate-x-1/2 z-30"
@@ -119,7 +121,7 @@ class="absolute top-12 left-1/2 -translate-x-1/2 z-30"
 
 <div
 id="statusText"
-class="bg-black/50 text-white px-4 py-2 rounded-full text-sm"
+class="bg-black/60 text-white px-4 py-2 rounded-full text-sm"
 >
 Searching document...
 </div>
@@ -131,7 +133,7 @@ Searching document...
 <button
 id="captureBtn"
 class="absolute bottom-10 left-1/2 -translate-x-1/2
-w-24 h-24 rounded-full bg-white border-[5px] border-gray-300 z-30"
+w-24 h-24 rounded-full bg-white border-[5px] border-gray-300 z-30 active:scale-95 transition"
 ></button>
 
 </div>
@@ -163,7 +165,9 @@ Save
 
 </div>
 
-<div class="flex-1 overflow-auto flex items-center justify-center p-4">
+<div
+class="flex-1 overflow-auto flex items-center justify-center p-4"
+>
 
 <canvas
 id="resultCanvas"
@@ -180,14 +184,21 @@ class="bg-white shadow-2xl max-w-full"
 
 <script>
 
-let video = document.getElementById('video');
-let overlay = document.getElementById('overlay');
-let ctx = overlay.getContext('2d');
+let video=document.getElementById('video');
 
-let resultCanvas = document.getElementById('resultCanvas');
+let overlay=document.getElementById('overlay');
+
+let ctx=overlay.getContext('2d');
+
+let resultCanvas=document.getElementById('resultCanvas');
 
 let animationId;
-let detectedDocument = null;
+
+let detectedDocument=null;
+
+/* =========================
+   WAIT FOR OPENCV
+========================= */
 
 function waitForOpenCV(){
 
@@ -198,18 +209,24 @@ document.getElementById('loading').classList.add('hidden');
 document.getElementById('startScreen').classList.remove('hidden');
 
 return;
+
 }
 
 setTimeout(waitForOpenCV,300);
+
 }
 
 waitForOpenCV();
+
+/* =========================
+   START CAMERA
+========================= */
 
 async function startCamera(){
 
 try{
 
-const stream = await navigator.mediaDevices.getUserMedia({
+const stream=await navigator.mediaDevices.getUserMedia({
 
 video:{
 facingMode:{ideal:'environment'},
@@ -220,14 +237,15 @@ audio:false
 
 });
 
-video.srcObject = stream;
+video.srcObject=stream;
 
 await video.play();
 
-video.onloadedmetadata = ()=>{
+video.onloadedmetadata=()=>{
 
-overlay.width = video.videoWidth;
-overlay.height = video.videoHeight;
+overlay.width=video.videoWidth;
+
+overlay.height=video.videoHeight;
 
 processFrame();
 
@@ -237,11 +255,15 @@ processFrame();
 
 console.error(err);
 
-alert('Camera access failed.');
+alert('Camera access failed');
 
 }
 
 }
+
+/* =========================
+   START BUTTON
+========================= */
 
 document.getElementById('startBtn').addEventListener('click',async()=>{
 
@@ -252,6 +274,10 @@ document.getElementById('scannerUI').classList.remove('hidden');
 await startCamera();
 
 });
+
+/* =========================
+   PROCESS FRAME
+========================= */
 
 function processFrame(){
 
@@ -264,21 +290,34 @@ return;
 }
 
 overlay.width=video.videoWidth;
+
 overlay.height=video.videoHeight;
 
-ctx.clearRect(0,0,overlay.width,overlay.height);
+/* DRAW VIDEO */
 
-ctx.drawImage(video,0,0,overlay.width,overlay.height);
+ctx.drawImage(
+video,
+0,
+0,
+overlay.width,
+overlay.height
+);
 
 try{
 
 let src=cv.imread(overlay);
 
 let gray=new cv.Mat();
+
 let blur=new cv.Mat();
+
 let edges=new cv.Mat();
 
-cv.cvtColor(src,gray,cv.COLOR_RGBA2GRAY);
+cv.cvtColor(
+src,
+gray,
+cv.COLOR_RGBA2GRAY
+);
 
 cv.GaussianBlur(
 gray,
@@ -295,6 +334,7 @@ edges,
 );
 
 let contours=new cv.MatVector();
+
 let hierarchy=new cv.Mat();
 
 cv.findContours(
@@ -306,6 +346,7 @@ cv.CHAIN_APPROX_SIMPLE
 );
 
 let biggest=null;
+
 let maxArea=0;
 
 for(let i=0;i<contours.size();i++){
@@ -314,7 +355,7 @@ let cnt=contours.get(i);
 
 let area=cv.contourArea(cnt);
 
-if(area>5000){
+if(area>12000){
 
 let peri=cv.arcLength(cnt,true);
 
@@ -339,6 +380,8 @@ biggest=approx;
 
 }
 
+/* DRAW GREEN BORDER */
+
 if(biggest){
 
 detectedDocument=biggest;
@@ -346,19 +389,25 @@ detectedDocument=biggest;
 document.getElementById('statusText').innerText='Document Detected';
 
 ctx.strokeStyle='#00ff99';
-ctx.lineWidth=6;
+
+ctx.lineWidth=8;
 
 for(let i=0;i<4;i++){
 
 let x1=biggest.data32S[i*2];
+
 let y1=biggest.data32S[i*2+1];
 
 let x2=biggest.data32S[((i+1)%4)*2];
+
 let y2=biggest.data32S[((i+1)%4)*2+1];
 
 ctx.beginPath();
+
 ctx.moveTo(x1,y1);
+
 ctx.lineTo(x2,y2);
+
 ctx.stroke();
 
 }
@@ -371,11 +420,18 @@ document.getElementById('statusText').innerText='Searching document...';
 
 }
 
+/* CLEAN MEMORY */
+
 src.delete();
+
 gray.delete();
+
 blur.delete();
+
 edges.delete();
+
 contours.delete();
+
 hierarchy.delete();
 
 }catch(err){
@@ -387,6 +443,10 @@ console.log(err);
 animationId=requestAnimationFrame(processFrame);
 
 }
+
+/* =========================
+   CAPTURE
+========================= */
 
 document.getElementById('captureBtn').addEventListener('click',()=>{
 
@@ -414,11 +474,15 @@ y:detectedDocument.data32S[i*2+1]
 pts.sort((a,b)=>a.y-b.y);
 
 let top=pts.slice(0,2).sort((a,b)=>a.x-b.x);
+
 let bottom=pts.slice(2,4).sort((a,b)=>a.x-b.x);
 
 let tl=top[0];
+
 let tr=top[1];
+
 let bl=bottom[0];
+
 let br=bottom[1];
 
 let width=Math.max(
@@ -430,6 +494,10 @@ let height=Math.max(
 Math.hypot(tr.x-br.x,tr.y-br.y),
 Math.hypot(tl.x-bl.x,tl.y-bl.y)
 );
+
+width=parseInt(width);
+
+height=parseInt(height);
 
 let srcTri=cv.matFromArray(4,1,cv.CV_32FC2,[
 
@@ -449,17 +517,25 @@ width,height,
 
 ]);
 
-let M=cv.getPerspectiveTransform(srcTri,dstTri);
+let M=cv.getPerspectiveTransform(
+srcTri,
+dstTri
+);
 
 cv.warpPerspective(
 src,
 result,
 M,
-new cv.Size(width,height)
+new cv.Size(width,height),
+cv.INTER_LINEAR,
+cv.BORDER_CONSTANT,
+new cv.Scalar()
 );
 
 srcTri.delete();
+
 dstTri.delete();
+
 M.delete();
 
 }else{
@@ -468,38 +544,60 @@ src.copyTo(result);
 
 }
 
-let gray=new cv.Mat();
-let finalDoc=new cv.Mat();
+/* IMAGE ENHANCEMENT */
 
-cv.cvtColor(result,gray,cv.COLOR_RGBA2GRAY);
+let enhanced=new cv.Mat();
 
-cv.adaptiveThreshold(
-
-gray,
-finalDoc,
-255,
-cv.ADAPTIVE_THRESH_GAUSSIAN_C,
-cv.THRESH_BINARY,
-15,
-15
-
+cv.detailEnhance(
+result,
+enhanced,
+10,
+0.15
 );
 
-resultCanvas.width=finalDoc.cols;
-resultCanvas.height=finalDoc.rows;
+/* BRIGHTNESS */
 
-cv.imshow(resultCanvas,finalDoc);
+let brightness=new cv.Mat();
+
+enhanced.convertTo(
+brightness,
+-1,
+1.15,
+8
+);
+
+/* SHOW RESULT */
+
+resultCanvas.width=brightness.cols;
+
+resultCanvas.height=brightness.rows;
+
+cv.imshow(
+resultCanvas,
+brightness
+);
+
+/* CLEAN MEMORY */
 
 src.delete();
+
 result.delete();
-gray.delete();
-finalDoc.delete();
+
+enhanced.delete();
+
+brightness.delete();
+
+/* SHOW RESULT */
 
 document.getElementById('scannerUI').classList.add('hidden');
 
 document.getElementById('resultUI').classList.remove('hidden');
 
 });
+
+/* =========================
+   RETAKE
+========================= */
 
 document.getElementById('retakeBtn').addEventListener('click',()=>{
 
@@ -510,6 +608,10 @@ document.getElementById('scannerUI').classList.remove('hidden');
 processFrame();
 
 });
+
+/* =========================
+   SAVE
+========================= */
 
 document.getElementById('saveBtn').addEventListener('click',()=>{
 
