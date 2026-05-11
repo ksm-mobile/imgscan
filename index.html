@@ -1,580 +1,339 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover" />
+    <meta name="apple-mobile-web-app-capable" content="yes"/>
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+    <meta name="theme-color" content="#111827"/>
+    <title>Document Scanner</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
 
-<meta charset="UTF-8"/>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: black;
+            font-family: sans-serif;
+            touch-action: none;
+        }
 
-<meta
-name="viewport"
-content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"
-/>
+        #video, #overlay {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
 
-<meta name="apple-mobile-web-app-capable" content="yes"/>
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
-<meta name="theme-color" content="#111827"/>
+        .spinner {
+            border: 4px solid rgba(255,255,255,.2);
+            border-top: 4px solid #10b981;
+            border-radius: 50%;
+            width: 44px;
+            height: 44px;
+            animation: spin 1s linear infinite;
+        }
 
-<title>Scanner</title>
-
-<script src="https://cdn.tailwindcss.com"></script>
-
-<style>
-
-html,
-body{
-margin:0;
-padding:0;
-width:100%;
-height:100%;
-overflow:hidden;
-background:black;
-font-family:sans-serif;
-touch-action:none;
-}
-
-#video,
-#overlay{
-position:absolute;
-inset:0;
-width:100%;
-height:100%;
-object-fit:cover;
-}
-
-.spinner{
-border:4px solid rgba(255,255,255,.2);
-border-top:4px solid #10b981;
-border-radius:50%;
-width:44px;
-height:44px;
-animation:spin 1s linear infinite;
-}
-
-@keyframes spin{
-0%{transform:rotate(0deg)}
-100%{transform:rotate(360deg)}
-}
-
-</style>
-
+        @keyframes spin {
+            0% { transform: rotate(0deg) }
+            100% { transform: rotate(360deg) }
+        }
+    </style>
 </head>
-
 <body>
 
-<!-- LOADING -->
-
-<div
-id="loading"
-class="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center text-white"
->
-
-<div class="spinner mb-4"></div>
-
-<p class="text-lg font-semibold">
-Loading Scanner...
-</p>
-
-</div>
-
-<!-- START -->
-
-<div
-id="startScreen"
-class="hidden fixed inset-0 bg-black z-40 flex items-center justify-center"
->
-
-<button
-id="startBtn"
-class="bg-emerald-500 text-white px-8 py-4 rounded-2xl text-2xl font-bold"
->
-Start Camera
-</button>
-
-</div>
-
-<!-- CAMERA -->
-
-<div
-id="scannerUI"
-class="hidden fixed inset-0 bg-black overflow-hidden"
->
-
-<video
-id="video"
-autoplay
-playsinline
-muted
-></video>
-
-<canvas id="overlay"></canvas>
-
-<!-- GUIDE -->
-
-<div
-class="absolute inset-0 border border-white/20 m-6 rounded-2xl pointer-events-none"
-></div>
-
-<!-- STATUS -->
-
-<div
-class="absolute top-12 left-1/2 -translate-x-1/2 z-20"
->
-
-<div
-id="statusText"
-class="bg-black/60 text-white px-4 py-2 rounded-full text-sm"
->
-Searching document...
-</div>
-
-</div>
-
-<!-- CAPTURE -->
-
-<button
-id="captureBtn"
-class="absolute bottom-10 left-1/2 -translate-x-1/2
-w-24 h-24 rounded-full bg-white border-[5px] border-gray-300 z-30 active:scale-95 transition"
-></button>
-
-</div>
-
-<!-- RESULT -->
-
-<div
-id="resultUI"
-class="hidden fixed inset-0 bg-[#e5e5e5] z-50 flex flex-col"
->
-
-<div
-class="bg-white p-4 flex justify-between items-center shadow"
->
-
-<button
-id="retakeBtn"
-class="font-bold text-black"
->
-Retake
-</button>
-
-<button
-id="saveBtn"
-class="bg-emerald-500 text-white px-5 py-2 rounded-xl font-bold"
->
-Save
-</button>
-
-</div>
-
-<div
-class="flex-1 overflow-auto flex items-center justify-center p-4"
->
-
-<canvas
-id="resultCanvas"
-class="bg-white shadow-2xl max-w-full"
-></canvas>
-
-</div>
-
-</div>
-
-<!-- OpenCV -->
-
-<script async src="https://docs.opencv.org/4.x/opencv.js"></script>
-
-<script>
-
-let video=document.getElementById('video');
-
-let overlay=document.getElementById('overlay');
-
-let ctx=overlay.getContext('2d');
-
-let resultCanvas=document.getElementById('resultCanvas');
-
-let animationId;
-
-let detectedDocument=null;
-
-/* =========================
-   WAIT FOR OPENCV
-========================= */
-
-function waitForOpenCV(){
-
-if(window.cv && cv.imread){
-
-document.getElementById('loading').classList.add('hidden');
-
-document.getElementById('startScreen').classList.remove('hidden');
-
-return;
-
-}
-
-setTimeout(waitForOpenCV,300);
-
-}
-
-waitForOpenCV();
-
-/* =========================
-   START CAMERA
-========================= */
-
-async function startCamera(){
-
-try{
-
-const stream=await navigator.mediaDevices.getUserMedia({
-
-video:{
-facingMode:{ideal:'environment'},
-width:{ideal:1920},
-height:{ideal:1080}
-},
-audio:false
-
-});
-
-video.srcObject=stream;
-
-await video.play();
-
-video.onloadedmetadata=()=>{
-
-overlay.width=video.videoWidth;
-
-overlay.height=video.videoHeight;
-
-processFrame();
-
-};
-
-}catch(err){
-
-console.error(err);
-
-alert('Camera failed');
-
-}
-
-}
-
-/* =========================
-   START BUTTON
-========================= */
-
-document.getElementById('startBtn').addEventListener('click',async()=>{
-
-document.getElementById('startScreen').classList.add('hidden');
-
-document.getElementById('scannerUI').classList.remove('hidden');
-
-await startCamera();
-
-});
-
-/* =========================
-   PROCESS FRAME
-========================= */
-
-function processFrame(){
-
-if(!video.videoWidth){
-
-animationId=requestAnimationFrame(processFrame);
-
-return;
-
-}
-
-overlay.width=video.videoWidth;
-
-overlay.height=video.videoHeight;
-
-/* DRAW CAMERA */
-
-ctx.drawImage(
-video,
-0,
-0,
-overlay.width,
-overlay.height
-);
-
-try{
-
-let src=cv.imread(overlay);
-
-let gray=new cv.Mat();
-
-let blur=new cv.Mat();
-
-let edges=new cv.Mat();
-
-/* GRAYSCALE */
-
-cv.cvtColor(
-src,
-gray,
-cv.COLOR_RGBA2GRAY
-);
-
-/* BLUR */
-
-cv.GaussianBlur(
-gray,
-blur,
-new cv.Size(3,3),
-0
-);
-
-/* EDGE DETECTION */
-
-cv.Canny(
-blur,
-edges,
-30,
-120
-);
-
-let contours=new cv.MatVector();
-
-let hierarchy=new cv.Mat();
-
-/* FIND CONTOURS */
-
-cv.findContours(
-edges,
-contours,
-hierarchy,
-cv.RETR_EXTERNAL,
-cv.CHAIN_APPROX_SIMPLE
-);
-
-let biggest=null;
-
-let maxArea=0;
-
-/* FIND DOCUMENT */
-
-for(let i=0;i<contours.size();i++){
-
-let cnt=contours.get(i);
-
-let area=cv.contourArea(cnt);
-
-/* LOWER LIMIT FOR SMALL PAPER */
-
-if(area>2500){
-
-let peri=cv.arcLength(cnt,true);
-
-let approx=new cv.Mat();
-
-cv.approxPolyDP(
-cnt,
-approx,
-0.03*peri,
-true
-);
-
-/* ACCEPT MORE SHAPES */
-
-if(
-approx.rows>=4 &&
-approx.rows<=8 &&
-area>maxArea
-){
-
-maxArea=area;
-
-biggest=approx;
-
-}
-
-}
-
-}
-
-/* DRAW DETECTION */
-
-if(biggest){
-
-let rect=cv.boundingRect(biggest);
-
-ctx.strokeStyle='#00ff99';
-
-ctx.lineWidth=8;
-
-ctx.strokeRect(
-rect.x,
-rect.y,
-rect.width,
-rect.height
-);
-
-/* SAVE RECT */
-
-detectedDocument={
-
-x:rect.x,
-y:rect.y,
-width:rect.width,
-height:rect.height
-
-};
-
-document.getElementById('statusText').innerText='Document Detected';
-
-}else{
-
-detectedDocument=null;
-
-document.getElementById('statusText').innerText='Searching document...';
-
-}
-
-/* CLEAN MEMORY */
-
-src.delete();
-
-gray.delete();
-
-blur.delete();
-
-edges.delete();
-
-contours.delete();
-
-hierarchy.delete();
-
-}catch(err){
-
-console.log(err);
-
-}
-
-animationId=requestAnimationFrame(processFrame);
-
-}
-
-/* =========================
-   CAPTURE
-========================= */
-
-document.getElementById('captureBtn').addEventListener('click',()=>{
-
-cancelAnimationFrame(animationId);
-
-let src=cv.imread(overlay);
-
-let result=new cv.Mat();
-
-/* AUTO CROP */
-
-if(detectedDocument){
-
-let rect=detectedDocument;
-
-let roi=new cv.Rect(
-rect.x,
-rect.y,
-rect.width,
-rect.height
-);
-
-result=src.roi(roi).clone();
-
-}else{
-
-src.copyTo(result);
-
-}
-
-/* IMAGE ENHANCEMENT */
-
-let enhanced=new cv.Mat();
-
-cv.detailEnhance(
-result,
-enhanced,
-10,
-0.15
-);
-
-/* BRIGHTNESS */
-
-let finalImage=new cv.Mat();
-
-enhanced.convertTo(
-finalImage,
--1,
-1.15,
-8
-);
-
-/* SHOW RESULT */
-
-resultCanvas.width=finalImage.cols;
-
-resultCanvas.height=finalImage.rows;
-
-cv.imshow(
-resultCanvas,
-finalImage
-);
-
-/* CLEAN MEMORY */
-
-src.delete();
-
-result.delete();
-
-enhanced.delete();
-
-finalImage.delete();
-
-/* SHOW RESULT UI */
-
-document.getElementById('scannerUI').classList.add('hidden');
-
-document.getElementById('resultUI').classList.remove('hidden');
-
-});
-
-/* =========================
-   RETAKE
-========================= */
-
-document.getElementById('retakeBtn').addEventListener('click',()=>{
-
-document.getElementById('resultUI').classList.add('hidden');
-
-document.getElementById('scannerUI').classList.remove('hidden');
-
-processFrame();
-
-});
-
-/* =========================
-   SAVE
-========================= */
-
-document.getElementById('saveBtn').addEventListener('click',()=>{
-
-let link=document.createElement('a');
-
-link.download=`scan_${Date.now()}.png`;
-
-link.href=resultCanvas.toDataURL('image/png');
-
-link.click();
-
-});
-
-</script>
-
+    <!-- LOADING SCREEN -->
+    <div id="loading" class="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center text-white">
+        <div class="spinner mb-4"></div>
+        <p class="text-lg font-semibold">Loading Scanner...</p>
+        <p class="text-sm text-gray-400 mt-2">Loading OpenCV AI...</p>
+    </div>
+
+    <!-- START SCREEN -->
+    <div id="startScreen" class="hidden fixed inset-0 bg-black z-40 flex items-center justify-center">
+        <button id="startBtn" class="bg-emerald-500 text-white px-8 py-4 rounded-2xl text-2xl font-bold shadow-lg shadow-emerald-500/30 active:scale-95 transition-transform">
+            Start Camera
+        </button>
+    </div>
+
+    <!-- CAMERA UI -->
+    <div id="scannerUI" class="hidden fixed inset-0 bg-black overflow-hidden">
+        <video id="video" autoplay playsinline muted></video>
+        <canvas id="overlay"></canvas>
+
+        <!-- GUIDE -->
+        <div class="absolute inset-0 border border-white/20 m-6 rounded-2xl pointer-events-none"></div>
+
+        <!-- STATUS -->
+        <div class="absolute top-12 left-1/2 -translate-x-1/2 z-20">
+            <div id="statusText" class="bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-full text-sm font-medium transition-colors">
+                Searching document...
+            </div>
+        </div>
+
+        <!-- CAPTURE BUTTON -->
+        <button id="captureBtn" class="absolute bottom-10 left-1/2 -translate-x-1/2 w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-white border-[5px] border-gray-300 z-30 active:scale-90 transition-transform shadow-xl shadow-black/50"></button>
+    </div>
+
+    <!-- RESULT UI -->
+    <div id="resultUI" class="hidden fixed inset-0 bg-[#e5e5e5] z-50 flex flex-col">
+        <div class="bg-white p-4 flex justify-between items-center shadow-md">
+            <button id="retakeBtn" class="font-bold text-gray-700 active:text-black px-2 py-2">
+                &larr; Retake
+            </button>
+            <button id="saveBtn" class="bg-emerald-500 hover:bg-emerald-600 text-white px-6 py-2 rounded-xl font-bold transition-colors">
+                Save Image
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-auto flex items-center justify-center p-4">
+            <canvas id="resultCanvas" class="bg-white shadow-2xl max-w-full max-h-full object-contain"></canvas>
+        </div>
+    </div>
+
+    <!-- OpenCV.js Library -->
+    <script async src="https://docs.opencv.org/4.x/opencv.js" onload="onOpenCvReady();"></script>
+
+    <script>
+        let video = document.getElementById('video');
+        let overlay = document.getElementById('overlay');
+        let ctx = overlay.getContext('2d', { willReadFrequently: true });
+        let resultCanvas = document.getElementById('resultCanvas');
+        
+        let animationId;
+        let detectedDocument = null;
+        let isProcessing = false;
+
+        /* =========================
+           WAIT FOR OPENCV
+        ========================= */
+        function onOpenCvReady() {
+            // OpenCV.js uses WebAssembly, so we need to wait for runtime to initialize
+            cv['onRuntimeInitialized'] = () => {
+                document.getElementById('loading').classList.add('hidden');
+                document.getElementById('startScreen').classList.remove('hidden');
+            };
+            
+            // Fallback interval just in case onRuntimeInitialized doesn't fire (common in some OpenCV builds)
+            const checkReady = setInterval(() => {
+                if (window.cv && cv.Mat) {
+                    clearInterval(checkReady);
+                    document.getElementById('loading').classList.add('hidden');
+                    document.getElementById('startScreen').classList.remove('hidden');
+                }
+            }, 500);
+        }
+
+        /* =========================
+           START CAMERA
+        ========================= */
+        async function startCamera() {
+            try {
+                const stream = await navigator.mediaDevices.getUserMedia({
+                    video: {
+                        facingMode: { ideal: 'environment' },
+                        width: { ideal: 1920 },
+                        height: { ideal: 1080 }
+                    },
+                    audio: false
+                });
+
+                video.srcObject = stream;
+                await video.play();
+
+                video.onloadedmetadata = () => {
+                    overlay.width = video.videoWidth;
+                    overlay.height = video.videoHeight;
+                    processFrame();
+                };
+            } catch (err) {
+                console.error(err);
+                alert('Camera access failed. Please ensure you have granted camera permissions.');
+            }
+        }
+
+        /* =========================
+           START BUTTON
+        ========================= */
+        document.getElementById('startBtn').addEventListener('click', async () => {
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('scannerUI').classList.remove('hidden');
+            await startCamera();
+        });
+
+        /* =========================
+           PROCESS FRAME
+        ========================= */
+        function processFrame() {
+            if (!video.videoWidth || isProcessing) {
+                animationId = requestAnimationFrame(processFrame);
+                return;
+            }
+
+            overlay.width = video.videoWidth;
+            overlay.height = video.videoHeight;
+
+            // DRAW CAMERA TO CANVAS
+            ctx.drawImage(video, 0, 0, overlay.width, overlay.height);
+
+            try {
+                let src = cv.imread(overlay);
+                let gray = new cv.Mat();
+                let blur = new cv.Mat();
+                let edges = new cv.Mat();
+
+                cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
+                cv.GaussianBlur(gray, blur, new cv.Size(3, 3), 0);
+                cv.Canny(blur, edges, 30, 120);
+
+                let contours = new cv.MatVector();
+                let hierarchy = new cv.Mat();
+
+                cv.findContours(edges, contours, hierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
+
+                let biggest = null;
+                let maxArea = 0;
+
+                // FIND DOCUMENT CONTOUR
+                for (let i = 0; i < contours.size(); i++) {
+                    let cnt = contours.get(i);
+                    let area = cv.contourArea(cnt);
+
+                    if (area > 2500) {
+                        let peri = cv.arcLength(cnt, true);
+                        let approx = new cv.Mat();
+                        cv.approxPolyDP(cnt, approx, 0.03 * peri, true);
+
+                        if (approx.rows >= 4 && approx.rows <= 8 && area > maxArea) {
+                            maxArea = area;
+                            biggest = approx;
+                        } else {
+                            approx.delete();
+                        }
+                    }
+                }
+
+                // HIGHLIGHT DETECTION
+                const statusBadge = document.getElementById('statusText');
+                if (biggest) {
+                    let rect = cv.boundingRect(biggest);
+                    ctx.strokeStyle = '#10b981'; // Emerald 500
+                    ctx.lineWidth = 6;
+                    ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+
+                    detectedDocument = { x: rect.x, y: rect.y, width: rect.width, height: rect.height };
+                    
+                    statusBadge.innerText = 'Document Detected';
+                    statusBadge.className = 'bg-emerald-500 text-white px-4 py-2 rounded-full text-sm font-bold shadow-lg';
+                    
+                    biggest.delete(); // Cleanup
+                } else {
+                    detectedDocument = null;
+                    statusBadge.innerText = 'Searching document...';
+                    statusBadge.className = 'bg-black/60 backdrop-blur-md text-white px-4 py-2 rounded-full text-sm font-medium';
+                }
+
+                // CLEAN MEMORY
+                src.delete(); gray.delete(); blur.delete(); edges.delete(); contours.delete(); hierarchy.delete();
+            } catch (err) {
+                // Ignore transient errors on empty frames
+            }
+
+            animationId = requestAnimationFrame(processFrame);
+        }
+
+        /* =========================
+           CAPTURE BUTTON
+        ========================= */
+        document.getElementById('captureBtn').addEventListener('click', () => {
+            isProcessing = true;
+            cancelAnimationFrame(animationId);
+            
+            let src = null;
+            let result = null;
+            let enhanced = null;
+            let finalImage = null;
+
+            try {
+                src = cv.imread(overlay);
+                result = new cv.Mat();
+
+                // AUTO CROP
+                if (detectedDocument) {
+                    let rect = detectedDocument;
+                    // Ensure bounds stay within image dimensions to prevent OpenCV assertions
+                    let safeX = Math.max(0, rect.x);
+                    let safeY = Math.max(0, rect.y);
+                    let safeWidth = Math.min(rect.width, src.cols - safeX);
+                    let safeHeight = Math.min(rect.height, src.rows - safeY);
+
+                    let roi = new cv.Rect(safeX, safeY, safeWidth, safeHeight);
+                    result = src.roi(roi).clone();
+                } else {
+                    src.copyTo(result);
+                }
+
+                enhanced = new cv.Mat();
+                finalImage = new cv.Mat();
+
+                // IMAGE ENHANCEMENT
+                // Wrap in another try-catch as detailEnhance can occasionally fail on memory limits
+                try {
+                    cv.cvtColor(result, result, cv.COLOR_RGBA2RGB); // detailEnhance needs 3 channels usually
+                    cv.detailEnhance(result, enhanced, 10, 0.15);
+                    enhanced.convertTo(finalImage, -1, 1.15, 8); // Brightness
+                } catch(e) {
+                    console.warn("Enhancement failed, using unenhanced image.", e);
+                    result.copyTo(finalImage); // Fallback to raw crop
+                }
+
+                // SHOW RESULT
+                resultCanvas.width = finalImage.cols;
+                resultCanvas.height = finalImage.rows;
+                cv.imshow(resultCanvas, finalImage);
+
+                // SHOW RESULT UI
+                document.getElementById('scannerUI').classList.add('hidden');
+                document.getElementById('resultUI').classList.remove('hidden');
+
+            } catch(e) {
+                console.error("Capture processing error:", e);
+                alert("Failed to process image. Please try again.");
+                processFrame(); // restart
+            } finally {
+                // CLEANUP MEMORY
+                if (src) src.delete();
+                if (result) result.delete();
+                if (enhanced) enhanced.delete();
+                if (finalImage) finalImage.delete();
+                isProcessing = false;
+            }
+        });
+
+        /* =========================
+           RETAKE
+        ========================= */
+        document.getElementById('retakeBtn').addEventListener('click', () => {
+            document.getElementById('resultUI').classList.add('hidden');
+            document.getElementById('scannerUI').classList.remove('hidden');
+            processFrame();
+        });
+
+        /* =========================
+           SAVE
+        ========================= */
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            let link = document.createElement('a');
+            link.download = `scan_${Date.now()}.png`;
+            link.href = resultCanvas.toDataURL('image/png');
+            link.click();
+        });
+    </script>
 </body>
 </html>
