@@ -2,10 +2,12 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
+
 <meta
 name="viewport"
 content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"
 />
+
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
 <meta name="theme-color" content="#111827" />
@@ -15,6 +17,7 @@ content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,vie
 <script src="https://cdn.tailwindcss.com"></script>
 
 <style>
+
 html,
 body{
 margin:0;
@@ -49,66 +52,82 @@ animation:spin 1s linear infinite;
 0%{transform:rotate(0deg)}
 100%{transform:rotate(360deg)}
 }
+
 </style>
 </head>
 
 <body>
 
 <!-- LOADING -->
+
 <div
 id="loading"
 class="fixed inset-0 bg-black z-50 flex flex-col items-center justify-center text-white"
 >
+
 <div class="spinner mb-4"></div>
+
 <p id="loadingText" class="text-lg">
 Loading OpenCV...
 </p>
+
 </div>
 
 <!-- START -->
+
 <div
 id="startScreen"
 class="hidden fixed inset-0 bg-black z-40 flex items-center justify-center"
 >
+
 <button
 id="startBtn"
 class="bg-emerald-500 text-white px-8 py-4 rounded-2xl text-2xl font-bold"
 >
 Start Camera
 </button>
+
 </div>
 
 <!-- CAMERA -->
+
 <div
 id="scannerUI"
 class="hidden fixed inset-0 bg-black overflow-hidden"
 >
+
 <video
 id="video"
 autoplay
 playsinline
 muted
 ></video>
+
 <canvas id="overlay"></canvas>
 
 <!-- BORDER -->
+
 <div
 class="absolute inset-0 border border-white/20 m-6 rounded-2xl pointer-events-none"
 ></div>
 
 <!-- TEXT -->
+
 <div
 class="absolute top-12 left-1/2 -translate-x-1/2 z-30"
 >
+
 <div
 id="statusText"
 class="bg-black/50 text-white px-4 py-2 rounded-full text-sm"
 >
 Searching document...
 </div>
+
 </div>
 
 <!-- CAPTURE -->
+
 <button
 id="captureBtn"
 class="absolute bottom-10 left-1/2 -translate-x-1/2
@@ -118,103 +137,143 @@ w-24 h-24 rounded-full bg-white border-[5px] border-gray-300 z-30"
 </div>
 
 <!-- RESULT -->
+
 <div
 id="resultUI"
 class="hidden fixed inset-0 bg-[#e5e5e5] z-50 flex flex-col"
 >
+
 <div
 class="bg-white p-4 flex justify-between items-center shadow"
 >
+
 <button
 id="retakeBtn"
 class="font-bold text-black"
 >
 Retake
 </button>
+
 <button
 id="saveBtn"
 class="bg-emerald-500 text-white px-5 py-2 rounded-xl font-bold"
 >
 Save
 </button>
+
 </div>
 
 <div class="flex-1 overflow-auto flex items-center justify-center p-4">
+
 <canvas
 id="resultCanvas"
 class="bg-white shadow-2xl max-w-full"
 ></canvas>
+
 </div>
+
 </div>
 
 <!-- OpenCV -->
+
 <script async src="https://docs.opencv.org/4.x/opencv.js"></script>
 
 <script>
+
 let video = document.getElementById('video');
 let overlay = document.getElementById('overlay');
 let ctx = overlay.getContext('2d');
+
 let resultCanvas = document.getElementById('resultCanvas');
 
 let animationId;
 let detectedDocument = null;
 
 function waitForOpenCV(){
+
 if(window.cv && cv.imread){
+
 document.getElementById('loading').classList.add('hidden');
+
 document.getElementById('startScreen').classList.remove('hidden');
+
 return;
 }
+
 setTimeout(waitForOpenCV,300);
 }
 
 waitForOpenCV();
 
 async function startCamera(){
+
 try{
+
 const stream = await navigator.mediaDevices.getUserMedia({
+
 video:{
 facingMode:{ideal:'environment'},
 width:{ideal:1920},
 height:{ideal:1080}
 },
 audio:false
+
 });
 
 video.srcObject = stream;
+
 await video.play();
 
 video.onloadedmetadata = ()=>{
+
 overlay.width = video.videoWidth;
 overlay.height = video.videoHeight;
+
 processFrame();
+
 };
+
 }catch(err){
+
 console.error(err);
+
 alert('Camera access failed.');
+
 }
+
 }
 
 document.getElementById('startBtn').addEventListener('click',async()=>{
+
 document.getElementById('startScreen').classList.add('hidden');
+
 document.getElementById('scannerUI').classList.remove('hidden');
+
 await startCamera();
+
 });
 
 function processFrame(){
+
 if(!video.videoWidth){
+
 animationId=requestAnimationFrame(processFrame);
+
 return;
+
 }
 
 overlay.width=video.videoWidth;
 overlay.height=video.videoHeight;
 
 ctx.clearRect(0,0,overlay.width,overlay.height);
+
 ctx.drawImage(video,0,0,overlay.width,overlay.height);
 
 try{
+
 let src=cv.imread(overlay);
+
 let gray=new cv.Mat();
 let blur=new cv.Mat();
 let edges=new cv.Mat();
@@ -250,11 +309,15 @@ let biggest=null;
 let maxArea=0;
 
 for(let i=0;i<contours.size();i++){
+
 let cnt=contours.get(i);
+
 let area=cv.contourArea(cnt);
 
 if(area>5000){
+
 let peri=cv.arcLength(cnt,true);
+
 let approx=new cv.Mat();
 
 cv.approxPolyDP(
@@ -265,22 +328,31 @@ true
 );
 
 if(approx.rows===4 && area>maxArea){
+
 maxArea=area;
+
 biggest=approx;
+
 }
+
 }
+
 }
 
 if(biggest){
+
 detectedDocument=biggest;
+
 document.getElementById('statusText').innerText='Document Detected';
 
 ctx.strokeStyle='#00ff99';
 ctx.lineWidth=6;
 
 for(let i=0;i<4;i++){
+
 let x1=biggest.data32S[i*2];
 let y1=biggest.data32S[i*2+1];
+
 let x2=biggest.data32S[((i+1)%4)*2];
 let y2=biggest.data32S[((i+1)%4)*2+1];
 
@@ -288,10 +360,15 @@ ctx.beginPath();
 ctx.moveTo(x1,y1);
 ctx.lineTo(x2,y2);
 ctx.stroke();
+
 }
+
 }else{
+
 detectedDocument=null;
+
 document.getElementById('statusText').innerText='Searching document...';
+
 }
 
 src.delete();
@@ -300,27 +377,38 @@ blur.delete();
 edges.delete();
 contours.delete();
 hierarchy.delete();
+
 }catch(err){
+
 console.log(err);
+
 }
 
 animationId=requestAnimationFrame(processFrame);
+
 }
 
 document.getElementById('captureBtn').addEventListener('click',()=>{
+
 cancelAnimationFrame(animationId);
 
 let src=cv.imread(overlay);
+
 let result=new cv.Mat();
 
 if(detectedDocument){
+
 let pts=[];
 
 for(let i=0;i<4;i++){
+
 pts.push({
+
 x:detectedDocument.data32S[i*2],
 y:detectedDocument.data32S[i*2+1]
+
 });
+
 }
 
 pts.sort((a,b)=>a.y-b.y);
@@ -344,17 +432,21 @@ Math.hypot(tl.x-bl.x,tl.y-bl.y)
 );
 
 let srcTri=cv.matFromArray(4,1,cv.CV_32FC2,[
+
 tl.x,tl.y,
 tr.x,tr.y,
 br.x,br.y,
 bl.x,bl.y
+
 ]);
 
 let dstTri=cv.matFromArray(4,1,cv.CV_32FC2,[
+
 0,0,
 width,0,
 width,height,
 0,height
+
 ]);
 
 let M=cv.getPerspectiveTransform(srcTri,dstTri);
@@ -369,35 +461,68 @@ new cv.Size(width,height)
 srcTri.delete();
 dstTri.delete();
 M.delete();
+
 }else{
+
 src.copyTo(result);
+
 }
 
-// Show the original colored, perspective-corrected image directly
-resultCanvas.width=result.cols;
-resultCanvas.height=result.rows;
-cv.imshow(resultCanvas, result);
+let gray=new cv.Mat();
+let finalDoc=new cv.Mat();
 
-// Cleanup
+cv.cvtColor(result,gray,cv.COLOR_RGBA2GRAY);
+
+cv.adaptiveThreshold(
+
+gray,
+finalDoc,
+255,
+cv.ADAPTIVE_THRESH_GAUSSIAN_C,
+cv.THRESH_BINARY,
+15,
+15
+
+);
+
+resultCanvas.width=finalDoc.cols;
+resultCanvas.height=finalDoc.rows;
+
+cv.imshow(resultCanvas,finalDoc);
+
 src.delete();
 result.delete();
+gray.delete();
+finalDoc.delete();
 
 document.getElementById('scannerUI').classList.add('hidden');
+
 document.getElementById('resultUI').classList.remove('hidden');
+
 });
 
 document.getElementById('retakeBtn').addEventListener('click',()=>{
+
 document.getElementById('resultUI').classList.add('hidden');
+
 document.getElementById('scannerUI').classList.remove('hidden');
+
 processFrame();
+
 });
 
 document.getElementById('saveBtn').addEventListener('click',()=>{
+
 let link=document.createElement('a');
+
 link.download=`scan_${Date.now()}.png`;
+
 link.href=resultCanvas.toDataURL('image/png');
+
 link.click();
+
 });
+
 </script>
 
 </body>
