@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <!-- Critical for mobile: Prevents zooming and sets app-like scaling -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <!-- PWA Tags for iOS and Android -->
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#111827">
+    <title>Scanner App</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #111; color: white; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; touch-action: none; }
+        #canvasOutput { width: 100%; height: 100%; object-fit: contain; }
+        .spinner { border: 4px solid rgba(255,255,255,0.3); border-radius: 50%; border-top: 4px solid #10B981; width: 40px; height: 40px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="flex flex-col h-[100dvh]"> <!-- Use dvh for mobile browser chrome handling -->
+
+    <!-- Loading Screen -->
+    <div id="loading" class="absolute inset-0 flex flex-col items-center justify-center bg-gray-900 z-50">
+        <div class="spinner mb-4"></div>
+        <p class="text-lg font-semibold" id="loadingText">Loading Vision Engine...</p>
+        <p class="text-xs text-gray-400 mt-2 text-center px-4">Initializing for mobile...</p>
+    </div>
+
+    <!-- Main Scanner UI -->
+    <div id="scannerUI" class="hidden flex-1 relative flex flex-col">
+        <video id="videoInput" class="hidden" playsinline autoplay></video>
+        
+        <!-- Display Canvas -->
+        <div class="flex-1 relative bg-black flex items-center justify-center overflow-hidden">
+            <canvas id="canvasOutput"></canvas>
+            
+            <div class="absolute inset-0 pointer-events-none border-[1px] border-white/20 m-6 rounded-xl flex flex-col items-center justify-center">
+                <span class="text-white/50 text-sm tracking-[0.2em] font-bold bg-black/40 px-3 py-1 rounded-full mb-2">SCAN DOCUMENT</span>
+                <span id="instructionText" class="text-emerald-400 text-xs font-medium bg-black/40 px-3 py-1 rounded-full opacity-0 transition-opacity duration-300">Document Found! Hold still.</span>
+            </div>
+        </div>
+
+        <!-- Bottom Controls -->
+        <div class="bg-gray-900 pb-safe pt-4 px-6 flex flex-col items-center justify-center space-y-2 h-32 shrink-0">
+            <button id="scanBtn" class="w-[72px] h-[72px] bg-white rounded-full flex items-center justify-center border-[3px] border-gray-400 active:bg-gray-200 transition-colors shadow-lg shadow-black/50">
+                <div class="w-14 h-14 rounded-full border-[2px] border-emerald-500 flex items-center justify-center bg-emerald-50 text-emerald-600">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"></path><path d="M17 3h2a2 2 0 0 1 2 2v2"></path><path d="M21 17v2a2 2 0 0 1-2 2h-2"></path><path d="M7 21H5a2 2 0 0 1-2-2v-2"></path></svg>
+                </div>
+            </button>
+        </div>
+    </div>
+
+    <!-- Result UI -->
+    <div id="resultUI" class="hidden absolute inset-0 bg-gray-100 flex flex-col z-40 text-black">
+        <div class="bg-white p-4 pt-safe shadow-sm flex justify-between items-center z-10 border-b">
+            <button id="retakeBtn" class="text-gray-500 font-semibold px-2 py-2 flex items-center space-x-1 active:opacity-50">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m15 18-6-6 6-6"/></svg>
+                <span>Retake</span>
+            </button>
+            <h2 class="font-bold text-sm">Preview</h2>
+            <button id="saveBtn" class="text-white bg-emerald-500 rounded-full px-4 py-1.5 font-semibold active:bg-emerald-600 shadow-sm">Save</button>
+        </div>
+        
+        <div class="flex-1 overflow-auto p-4 flex items-center justify-center bg-[#e5e5e5]">
+            <canvas id="resultCanvas" class="max-w-full max-h-full shadow-lg bg-white"></canvas>
+        </div>
+    </div>
+
+    <!-- OpenCV Script -->
+    <script async src="https://docs.opencv.org/4.8.0/opencv.js" onload="onOpenCvReady();" onerror="onOpenCvError();"></script>
+
+    <script>
+        let video = document.getElementById('videoInput');
+        let src, dst, gray, edges, cap, proc;
+        let streaming = false;
+        let animationId;
+        let currentDocumentCorners = null;
+        let docFoundFrames = 0;
+
+        const instructionText = document.getElementById('instructionText');
+
+        // Mobile performance setting: Process a smaller image internally for speed
+        const MAX_PROCESSING_WIDTH = 400; 
+
+        function onOpenCvError() {
+            document.getElementById('loadingText').innerText = "Failed to load Engine.";
+        }
+
+        function onOpenCvReady() {
+            document.getElementById('loadingText').innerText = "Accessing Camera...";
+            startCamera();
+        }
+
+        async function startCamera() {
+            try {
+                // Try strictly for the rear camera first (critical for mobile)
+                let stream;
+                try {
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: { exact: "environment" }, width: { ideal: 1920 }, height: { ideal: 1080 } },
+                        audio: false
+                    });
+                } catch(e) {
+                    // Fallback for desktops/devices without a specific "rear" camera
+                    stream = await navigator.mediaDevices.getUserMedia({
+                        video: { facingMode: 'environment' },
+                        audio: false
+                    });
+                }
+
+                video.srcObject = stream;
+                video.play();
+                
+                video.addEventListener('canplay', () => {
+                    if (!streaming) {
+                        streaming = true;
+                        document.getElementById('loading').classList.add('hidden');
+                        document.getElementById('scannerUI').classList.remove('hidden');
+                        
+                        document.getElementById('canvasOutput').width = video.videoWidth;
+                        document.getElementById('canvasOutput').height = video.videoHeight;
+                        
+                        // Initialize OpenCV matrices
+                        src = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
+                        dst = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4);
+                        gray = new cv.Mat();
+                        edges = new cv.Mat();
+                        proc = new cv.Mat(); // Matrix for downscaled processing
+                        cap = new cv.VideoCapture(video);
+                        
+                        requestAnimationFrame(processVideo);
+                    }
+                });
+            } catch (err) {
+                alert("Camera access denied or unavailable.");
+                console.error(err);
+            }
+        }
+
+        function processVideo() {
+            if (!streaming) return;
+
+            try {
+                cap.read(src);
+                src.copyTo(dst); 
+                
+                // --- Mobile Optimization ---
+                // Scale down the image before running heavy Canny edge detection
+                let scale = src.cols / MAX_PROCESSING_WIDTH;
+                let procSize = new cv.Size(MAX_PROCESSING_WIDTH, Math.round(src.rows / scale));
+                cv.resize(src, proc, procSize);
+                
+                cv.cvtColor(proc, gray, cv.COLOR_RGBA2GRAY, 0);
+                cv.GaussianBlur(gray, gray, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
+                cv.Canny(gray, edges, 75, 200, 3, false);
+
+                let contours = new cv.MatVector();
+                let hierarchy = new cv.Mat();
+                cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+
+                let maxArea = 0;
+                let bestApprox = null;
+
+                for (let i = 0; i < contours.size(); ++i) {
+                    let cnt = contours.get(i);
+                    let area = cv.contourArea(cnt);
+                    
+                    // Note: area check is smaller because we downscaled the image
+                    if (area > 1000) {
+                        let peri = cv.arcLength(cnt, true);
+                        let approx = new cv.Mat();
+                        cv.approxPolyDP(cnt, approx, 0.02 * peri, true);
+                        
+                        if (approx.rows === 4 && area > maxArea) {
+                            maxArea = area;
+                            if (bestApprox) bestApprox.delete();
+                            bestApprox = approx.clone();
+                        }
+                        approx.delete();
+                    }
+                    cnt.delete();
+                }
+
+                currentDocumentCorners = null;
+
+                if (bestApprox) {
+                    currentDocumentCorners = [];
+                    // Multiply back by scale to draw on the original high-res image
+                    for (let i = 0; i < 4; i++) {
+                        currentDocumentCorners.push({
+                            x: bestApprox.data32S[i * 2] * scale,
+                            y: bestApprox.data32S[i * 2 + 1] * scale
+                        });
+                    }
+
+                    // Draw green polygon
+                    for (let i = 0; i < 4; i++) {
+                        let p1 = new cv.Point(currentDocumentCorners[i].x, currentDocumentCorners[i].y);
+                        let p2 = new cv.Point(currentDocumentCorners[(i + 1) % 4].x, currentDocumentCorners[(i + 1) % 4].y);
+                        cv.line(dst, p1, p2, [16, 185, 129, 255], 4); 
+                    }
+                    bestApprox.delete();
+                    
+                    // UI Feedback
+                    docFoundFrames++;
+                    if(docFoundFrames > 5) instructionText.style.opacity = 1;
+                } else {
+                    docFoundFrames = 0;
+                    instructionText.style.opacity = 0;
+                }
+
+                cv.imshow('canvasOutput', dst);
+
+                contours.delete();
+                hierarchy.delete();
+
+                animationId = requestAnimationFrame(processVideo);
+            } catch (err) {
+                console.error("Processing Error:", err);
+            }
+        }
+
+        function orderPoints(pts) {
+            let rect = new Array(4);
+            let s = pts.map(p => p.x + p.y);
+            let d = pts.map(p => p.x - p.y);
+            rect[0] = pts[s.indexOf(Math.min(...s))]; 
+            rect[2] = pts[s.indexOf(Math.max(...s))]; 
+            rect[1] = pts[d.indexOf(Math.max(...d))]; 
+            rect[3] = pts[d.indexOf(Math.min(...d))]; 
+            return rect;
+        }
+
+        function distance(p1, p2) {
+            return Math.sqrt(Math.pow(p1.x - p2.x, 2) + Math.pow(p1.y - p2.y, 2));
+        }
+
+        document.getElementById('scanBtn').addEventListener('click', () => {
+            if (!currentDocumentCorners || currentDocumentCorners.length !== 4) {
+                // If it can't find a box, fake a subtle animation to indicate user should keep trying
+                document.getElementById('scanBtn').style.transform = "scale(0.95)";
+                setTimeout(()=> document.getElementById('scanBtn').style.transform = "scale(1)", 150);
+                return;
+            }
+
+            cancelAnimationFrame(animationId);
+            document.getElementById('scannerUI').classList.add('hidden');
+            document.getElementById('resultUI').classList.remove('hidden');
+
+            try {
+                let orderedPts = orderPoints(currentDocumentCorners);
+                let tl = orderedPts[0], tr = orderedPts[1], br = orderedPts[2], bl = orderedPts[3];
+
+                let widthA = distance(br, bl), widthB = distance(tr, tl);
+                let maxWidth = Math.max(parseInt(widthA), parseInt(widthB));
+
+                let heightA = distance(tr, br), heightB = distance(tl, bl);
+                let maxHeight = Math.max(parseInt(heightA), parseInt(heightB));
+
+                let srcTri = cv.matFromArray(4, 1, cv.CV_32FC2, [tl.x, tl.y, tr.x, tr.y, br.x, br.y, bl.x, bl.y]);
+                let dstTri = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, maxWidth - 1, 0, maxWidth - 1, maxHeight - 1, 0, maxHeight - 1]);
+
+                let transform = cv.getPerspectiveTransform(srcTri, dstTri);
+                let finalDoc = new cv.Mat();
+                // Crop from the high-res original `src`
+                cv.warpPerspective(src, finalDoc, transform, new cv.Size(maxWidth, maxHeight));
+
+                // B&W Document Filter
+                cv.cvtColor(finalDoc, finalDoc, cv.COLOR_RGBA2GRAY, 0);
+                cv.adaptiveThreshold(finalDoc, finalDoc, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY, 15, 4);
+
+                cv.imshow('resultCanvas', finalDoc);
+
+                srcTri.delete(); dstTri.delete(); transform.delete(); finalDoc.delete();
+            } catch (err) {
+                alert("Processing failed. Retake image.");
+            }
+        });
+
+        document.getElementById('retakeBtn').addEventListener('click', () => {
+            document.getElementById('resultUI').classList.add('hidden');
+            document.getElementById('scannerUI').classList.remove('hidden');
+            animationId = requestAnimationFrame(processVideo); 
+        });
+
+        document.getElementById('saveBtn').addEventListener('click', () => {
+            const dataURL = document.getElementById('resultCanvas').toDataURL('image/png');
+            const link = document.createElement('a');
+            link.download = `Scan_${Date.now()}.png`;
+            link.href = dataURL;
+            link.click();
+        });
+
+    </script>
+</body>
+</html>
